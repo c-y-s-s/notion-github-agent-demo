@@ -26,8 +26,9 @@ export async function getGithubRepositoryContext(text:string) {
   const ref = process.env.GITHUB_ANALYSIS_REF || "codex/fix-real-data-multi-links";
   const token = process.env.GITHUB_TOKEN;
   const explicitPaths = extractSafeCodePaths(text);
-  const paths = explicitPaths.length ? explicitPaths : inferFallbackPaths(text);
-  const files = await Promise.all(paths.map(async (path) => {
+  const primaryPaths = explicitPaths.length ? explicitPaths : inferFallbackPaths(text);
+  const paths = [...new Set([...primaryPaths, "package.json"])].slice(0, 5);
+  const fetched = await Promise.all(paths.map(async (path) => {
     const response = await fetch(`https://api.github.com/repos/${repository}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(ref)}`, {
       headers:{ Accept:"application/vnd.github+json", "X-GitHub-Api-Version":"2026-03-10", "User-Agent":"traceboard-local-demo", ...(token ? { Authorization:`Bearer ${token}` } : {}) },
       cache:"no-store",
@@ -35,7 +36,14 @@ export async function getGithubRepositoryContext(text:string) {
     if (!response.ok) return null;
     const data = await response.json() as { type?:string; encoding?:string; content?:string; size?:number };
     if (data.type !== "file" || data.encoding !== "base64" || !data.content || (data.size || 0) > 80_000) return null;
-    return { path, content:atob(data.content.replace(/\n/g, "")).slice(0, 14_000) };
+    return { path, content:atob(data.content.replace(/\n/g, "")) };
   }));
-  return { repository, ref, files:files.filter((file):file is {path:string;content:string} => file !== null) };
+  let remaining = 64_000;
+  const files = fetched.filter((file):file is {path:string;content:string} => file !== null).flatMap((file) => {
+    if (remaining <= 0) return [];
+    const content = file.content.slice(0, remaining);
+    remaining -= content.length;
+    return [{ path:file.path, content, truncated:content.length < file.content.length }];
+  });
+  return { repository, ref, files };
 }
