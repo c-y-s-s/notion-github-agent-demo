@@ -18,7 +18,7 @@ type ApiTask = {
 };
 type ChatMessage = { role:"user"|"agent"; text:string; tools?:string[] };
 type SyncIssue = { number:number; title:string; url:string; workType:string };
-type TaskAgentAnalysis = { summary:string; likely_cause:string; proposed_changes:string[]; validation_steps:string[]; risk_level:"low"|"medium"|"high"; eligible_for_small_fix:boolean; eligibility_reason:string; blocked_by:string[] };
+type TaskAgentAnalysis = { summary:string; likely_cause:string; proposed_changes:string[]; validation_steps:string[]; risk_level:"low"|"medium"|"high"; eligible_for_small_fix:boolean; eligibility_reason:string; blocked_by:string[]; inspected_files:string[] };
 
 const filters = ["全部", "本週", "逾期", "無期限", "未開始", "執行中", "已完成"] as const;
 
@@ -56,6 +56,7 @@ export default function Home() {
   const [taskAgentAnalysis, setTaskAgentAnalysis] = useState<TaskAgentAnalysis|null>(null);
   const [taskAnalysisLoading, setTaskAnalysisLoading] = useState(false);
   const [taskAnalysisError, setTaskAnalysisError] = useState("");
+  const [approvedTaskId, setApprovedTaskId] = useState("");
 
   const loadTasks = useCallback(async () => {
     setSource("loading");
@@ -165,7 +166,7 @@ export default function Home() {
   }
 
   async function analyzeTask(task:Task) {
-    setSelectedTask(task); setTaskAgentAnalysis(null); setTaskAnalysisError(""); setTaskAnalysisLoading(true);
+    setSelectedTask(task); setTaskAgentAnalysis(null); setTaskAnalysisError(""); setApprovedTaskId(""); setTaskAnalysisLoading(true);
     try {
       const response = await fetch("/api/tasks/analyze", { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ taskId:task.id }) });
       const data = await response.json() as { analysis?:TaskAgentAnalysis; error?:string };
@@ -264,8 +265,10 @@ export default function Home() {
               <section><h3>可能原因</h3><p>{taskAgentAnalysis.likely_cause}</p></section>
               <section><h3>建議修改方向</h3><ol>{taskAgentAnalysis.proposed_changes.map((item) => <li key={item}>{item}</li>)}</ol></section>
               <section><h3>驗證方式</h3><ol>{taskAgentAnalysis.validation_steps.map((item) => <li key={item}>{item}</li>)}</ol></section>
+              <section><h3>實際檢查檔案</h3>{taskAgentAnalysis.inspected_files.length ? <ul className="fileList">{taskAgentAnalysis.inspected_files.map((item) => <li key={item}><code>{item}</code></li>)}</ul> : <p>Issue 沒有提供可安全讀取的程式檔案路徑。</p>}</section>
               {!!taskAgentAnalysis.blocked_by.length && <section><h3>目前缺少</h3><ul>{taskAgentAnalysis.blocked_by.map((item) => <li key={item}>{item}</li>)}</ul></section>}
-              <div className="drawerActions"><a href={selectedTask.notionUrl} target="_blank" rel="noreferrer">開啟 Notion</a><button disabled title="下一階段才會開放程式修改">確認修改方向（尚未開放）</button></div>
+              {approvedTaskId === selectedTask.id && <p className="approvalConfirmed">修改方向已確認。尚未執行程式修改或建立分支。</p>}
+              <div className="drawerActions"><a href={selectedTask.notionUrl} target="_blank" rel="noreferrer">開啟 Notion</a><button disabled={!taskAgentAnalysis.eligible_for_small_fix || approvedTaskId === selectedTask.id} onClick={() => setApprovedTaskId(selectedTask.id)}>{approvedTaskId === selectedTask.id ? "已確認修改方向" : "確認修改方向"}</button></div>
             </div>}
           </aside>
         </div>}
