@@ -44,6 +44,8 @@ export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [dailySummary, setDailySummary] = useState("");
   const [dailyLoading, setDailyLoading] = useState(false);
+  const [slackLoading, setSlackLoading] = useState(false);
+  const [slackResult, setSlackResult] = useState("");
 
   const loadTasks = useCallback(async () => {
     setSource("loading");
@@ -113,6 +115,20 @@ export default function Home() {
     } finally { setDailyLoading(false); }
   }
 
+  async function sendToSlack() {
+    if (slackLoading) return;
+    setSlackLoading(true);
+    setSlackResult("");
+    try {
+      const response = await fetch("/api/notifications/slack", { method:"POST" });
+      const data = await response.json() as { sent?:boolean; error?:string };
+      if (!response.ok || !data.sent) throw new Error(data.error || "Slack failed");
+      setSlackResult("已發送到 Slack");
+    } catch (error) {
+      setSlackResult(error instanceof Error && error.message === "slack_not_configured" ? "尚未設定 Slack Webhook" : `發送失敗：${error instanceof Error ? error.message : "unknown_error"}`);
+    } finally { setSlackLoading(false); }
+  }
+
   return (
     <main>
       <header className="topbar">
@@ -136,8 +152,12 @@ export default function Home() {
         <section className="dailyBrief" aria-labelledby="daily-brief-title">
           <div className="dailyBriefHead">
             <div><h2 id="daily-brief-title">每日工作摘要</h2><p>依逾期、今天到期與狀態矛盾整理，不會修改 Notion。</p></div>
-            <button onClick={() => void generateDailySummary()} disabled={dailyLoading || source !== "notion"}>{dailyLoading ? "整理中…" : dailySummary ? "重新產生" : "產生今日摘要"}</button>
+            <div className="dailyActions">
+              <button onClick={() => void generateDailySummary()} disabled={dailyLoading || source !== "notion"}>{dailyLoading ? "整理中…" : dailySummary ? "重新產生" : "產生今日摘要"}</button>
+              <button className="slackButton" onClick={() => void sendToSlack()} disabled={slackLoading || source !== "notion"}>{slackLoading ? "發送中…" : "立即發送 Slack"}</button>
+            </div>
           </div>
+          {slackResult && <p className={`slackResult ${slackResult.startsWith("已") ? "success" : "error"}`}>{slackResult}</p>}
           {dailySummary ? <div className="dailyBriefContent"><AgentMarkdown>{dailySummary}</AgentMarkdown></div> : <p className="dailyBriefEmpty">產生後會顯示今日概況，以及最多三項需要優先處理的工作。</p>}
         </section>
 
