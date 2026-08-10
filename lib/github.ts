@@ -12,6 +12,16 @@ const cacheTtl = Number(process.env.GITHUB_CACHE_TTL_MS || 60_000);
 
 type GithubLink = { owner: string; repo: string; kind: "issues" | "pull"; number: number; url: string };
 
+type TimelineEvent = { event?:string; source?:{ issue?:{ html_url?:string; pull_request?:{ html_url?:string } } } };
+
+export function extractLinkedPullRequestUrls(events:TimelineEvent[]) {
+  return [...new Set(events.flatMap((event) => {
+    if (event.event !== "cross-referenced" || !event.source?.issue?.pull_request) return [];
+    const url = event.source.issue.pull_request.html_url || event.source.issue.html_url;
+    return url && parseGithubLink(url)?.kind === "pull" ? [url] : [];
+  }))];
+}
+
 function parseGithubLink(value: string): GithubLink | null {
   try {
     const url = new URL(value);
@@ -105,4 +115,21 @@ export async function getGithubEvidence(value: string, notionStatus: string): Pr
     url: link.url,
     conflict: notionStatus === "已完成" && phase !== "merged",
   };
+}
+
+export async function getGithubEvidenceSet(value:string, notionStatus:string):Promise<GithubEvidence[]> {
+  const link = parseGithubLink(value);
+  if (!link) return [];
+  const direct = await getGithubEvidence(value, notionStatus);
+  if (link.kind !== "issues") return direct ? [direct] : [];
+  let linkedUrls:string[] = [];
+  try {
+    const events = await githubFetch<TimelineEvent[]>(`/repos/${encodeURIComponent(link.owner)}/${encodeURIComponent(link.repo)}/issues/${link.number}/timeline?per_page=100`);
+    linkedUrls = extractLinkedPullRequestUrls(events);
+  } catch { /* The Issue evidence remains useful when timeline access fails. */ }
+  const linked = await Promise.all(linkedUrls.map(async (url) => {
+    try { return await getGithubEvidence(url, notionStatus); }
+    catch { return null; }
+  }));
+  return [...(direct ? [direct] : []), ...linked.filter((item):item is GithubEvidence => item !== null)];
 }

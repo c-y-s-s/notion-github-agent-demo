@@ -1,5 +1,5 @@
 import { queryNotionTasks } from "./notion";
-import { getGithubEvidence } from "./github";
+import { getGithubEvidenceSet } from "./github";
 import { classifyTask, formatWeekLabel, getWeekPeriod } from "./date";
 import { analyzeTaskEvidence } from "./rules";
 
@@ -9,10 +9,10 @@ export async function getTaskDataset() {
   const period = getWeekPeriod();
   const tasks = await Promise.all(result.tasks.map(async (task) => {
     const results = await Promise.all(task.githubLinks.map(async (link) => {
-      try { return { link, evidence:await getGithubEvidence(link, task.status), error:null }; }
+      try { return { link, evidence:await getGithubEvidenceSet(link, task.status), error:null }; }
       catch (error) { return { link, evidence:null, error:error instanceof Error ? error.message : "GitHub query failed" }; }
     }));
-    const evidence = results.flatMap((item) => item.evidence ? [item.evidence] : []);
+    const evidence = results.flatMap((item) => item.evidence || []);
     return {
       ...task,
       computedTags:classifyTask(task, period),
