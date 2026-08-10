@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import Markdown from "react-markdown";
 
 type Status = "未開始" | "執行中" | "已完成";
 type Tone = "neutral" | "review" | "success" | "risk";
@@ -17,6 +18,10 @@ type ApiTask = {
 type ChatMessage = { role:"user"|"agent"; text:string; tools?:string[] };
 
 const filters = ["全部", "本週", "逾期", "無期限", "未開始", "執行中", "已完成"] as const;
+
+function AgentMarkdown({ children }:{ children:string }) {
+  return <div className="agentMarkdown"><Markdown components={{ a:({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" /> }}>{children}</Markdown></div>;
+}
 
 function normalizeTask(task: ApiTask): Task {
   const validEvidence: Evidence[] = (task.githubEvidence || []).map((item) => ({ ...item }));
@@ -133,7 +138,7 @@ export default function Home() {
             <div><h2 id="daily-brief-title">每日工作摘要</h2><p>依逾期、今天到期與狀態矛盾整理，不會修改 Notion。</p></div>
             <button onClick={() => void generateDailySummary()} disabled={dailyLoading || source !== "notion"}>{dailyLoading ? "整理中…" : dailySummary ? "重新產生" : "產生今日摘要"}</button>
           </div>
-          {dailySummary ? <div className="dailyBriefContent">{dailySummary}</div> : <p className="dailyBriefEmpty">產生後會顯示今日概況，以及最多三項需要優先處理的工作。</p>}
+          {dailySummary ? <div className="dailyBriefContent"><AgentMarkdown>{dailySummary}</AgentMarkdown></div> : <p className="dailyBriefEmpty">產生後會顯示今日概況，以及最多三項需要優先處理的工作。</p>}
         </section>
 
         <section className="workspace">
@@ -180,7 +185,7 @@ export default function Home() {
           {!!messages.length && <div className="conversation" aria-live="polite">
             {messages.map((message, index) => <div className={`message ${message.role}`} key={`${message.role}-${index}`}>
               <strong>{message.role === "agent" ? "Agent" : "你"}</strong>
-              <p>{message.text}</p>
+              <AgentMarkdown>{message.text}</AgentMarkdown>
               {!!message.tools?.length && <small>使用工具：{message.tools.join("、")}</small>}
             </div>)}
             {chatLoading && <div className="message agent"><strong>Agent</strong><p>正在查詢任務與證據…</p></div>}

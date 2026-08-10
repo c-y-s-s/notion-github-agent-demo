@@ -31,7 +31,7 @@ h1 { margin:0; font-size:26px; line-height:1.2; letter-spacing:-.025em; }
 .dailyBriefHead button { flex:0 0 auto; padding:7px 10px; border:1px solid #bfc7cf; border-radius:5px; color:var(--ink); background:#f7f8f9; font-size:12px; font-weight:700; }
 .dailyBriefHead button:hover { background:#eef1f3; }
 .dailyBriefHead button:disabled { cursor:not-allowed; opacity:.55; }
-.dailyBriefContent { margin-top:14px; padding-top:14px; border-top:1px solid var(--line); font-size:13px; line-height:1.65; white-space:pre-wrap; }
+.dailyBriefContent { margin-top:14px; padding-top:14px; border-top:1px solid var(--line); font-size:13px; line-height:1.65; }
 .workspace { padding:22px; border:1px solid var(--line); border-radius:7px; background:#fff; }
 .sectionHead { display:flex; align-items:end; justify-content:space-between; gap:24px; margin-bottom:24px; }
 h2 { margin:0; font-size:17px; letter-spacing:-.015em; }
@@ -68,8 +68,20 @@ h2 { margin:0; font-size:17px; letter-spacing:-.015em; }
 .message { max-width:82%; padding:11px 13px; border-radius:6px; background:white; border:1px solid var(--line); }
 .message.user { justify-self:end; color:white; background:var(--accent); border-color:var(--accent); }
 .message strong { font-size:11px; letter-spacing:.08em; text-transform:uppercase; }
-.message p { margin:7px 0 0; font-size:14px; line-height:1.65; white-space:pre-wrap; }
+.message .agentMarkdown { margin-top:7px; font-size:14px; line-height:1.65; }
 .message small { display:block; margin-top:8px; color:var(--muted); font-size:11px; }
+.agentMarkdown > :first-child { margin-top:0; }
+.agentMarkdown > :last-child { margin-bottom:0; }
+.agentMarkdown h1,.agentMarkdown h2,.agentMarkdown h3 { margin:16px 0 6px; font-size:14px; line-height:1.4; letter-spacing:0; }
+.agentMarkdown p { margin:7px 0; }
+.agentMarkdown ul,.agentMarkdown ol { margin:7px 0; padding-left:22px; }
+.agentMarkdown li { margin:4px 0; padding-left:2px; }
+.agentMarkdown strong { font-size:inherit; letter-spacing:0; text-transform:none; }
+.agentMarkdown a { color:var(--blue); overflow-wrap:anywhere; text-decoration:none; }
+.agentMarkdown a:hover { text-decoration:underline; }
+.agentMarkdown code { padding:2px 4px; border-radius:3px; background:#edf0f2; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.9em; }
+.message.user .agentMarkdown a { color:#fff; text-decoration:underline; }
+.message.user .agentMarkdown code { color:var(--ink); }
 .agentForm { display:grid; grid-template-columns:1fr auto; gap:10px; margin-top:16px; }
 .agentForm input { min-width:0; padding:10px 12px; border:1px solid #cbd0d5; border-radius:5px; outline:none; }
 .agentForm input:focus { border-color:#6b8eb5; box-shadow:0 0 0 2px #e3ebf4; }
