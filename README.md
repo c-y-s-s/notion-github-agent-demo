@@ -33,5 +33,7 @@ npm run dev
 - Notion Integration 與 Data Source schema mapping
 - GitHub Issue／PR URL parser
 - GitHub PR、Review 與 Checks 證據（公開 Repo 不需 Token）
+- Asia/Taipei 動態週期、本週完成、逾期與無期限分類
+- GitHub 60 秒記憶體快取與 rate-limit 錯誤分類
 - 規則式 evidence analysis
 - 固定格式週報

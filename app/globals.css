@@ -40,6 +40,10 @@ h2 { margin:0; font-size:22px; letter-spacing:-.025em; }
 .taskName strong,.githubEvidence strong { display:block; font-size:14px; }
 .githubEvidence a { color:var(--ink); text-decoration:none; }.githubEvidence a:hover { color:var(--blue); text-decoration:underline; }
 .taskName small,.githubEvidence small { display:block; margin-top:6px; color:var(--muted); font-size:12px; }
+.githubEvidenceList { display:grid; gap:12px; padding:12px 0; }
+.githubEvidence + .githubEvidence { padding-top:12px; border-top:1px dashed var(--line); }
+.dataState { padding:32px 14px; color:var(--muted); text-align:center; font-size:14px; border-bottom:1px solid var(--line); }
+.errorState { color:var(--red); }
 .status { display:inline-block; padding:6px 9px; border-radius:99px; font-size:12px; font-weight:700; }
 .status-未開始 { background:#eef0f2; color:#606975; }.status-執行中 { background:#e3edff; color:#235bb7; }.status-已完成 { background:#ddf5e8; color:#087a4b; }
 .githubEvidence small.review { color:#9a6700; }.githubEvidence small.success { color:#087a4b; }.githubEvidence small.risk { color:var(--red); font-weight:700; }
