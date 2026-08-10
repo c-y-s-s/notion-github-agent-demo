@@ -87,6 +87,17 @@ export default function Home() {
 
   useEffect(() => { void loadTasks(); }, [loadTasks]);
 
+  useEffect(() => {
+    if (!selectedTask) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedTask(null);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedTask]);
+
   const visibleTasks = useMemo(() => tasks.filter((task) => {
     if (filter === "全部") return true;
     if (filter === "本週") return task.computedTags.includes("due_this_week") || task.computedTags.includes("completed_this_week");
