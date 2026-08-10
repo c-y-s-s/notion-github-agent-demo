@@ -19,6 +19,7 @@ type ApiTask = {
 type ChatMessage = { role:"user"|"agent"; text:string; tools?:string[] };
 type SyncIssue = { number:number; title:string; url:string; workType:string };
 type TaskAgentAnalysis = { summary:string; likely_cause:string; proposed_changes:string[]; validation_steps:string[]; risk_level:"low"|"medium"|"high"; eligible_for_small_fix:boolean; eligibility_reason:string; blocked_by:string[]; inspected_files:string[] };
+type FixPreview = { branch:string; changedFiles:string[]; diff:string; testSummary:string; pushToken:string };
 
 const filters = ["全部", "本週", "逾期", "無期限", "未開始", "執行中", "已完成"] as const;
 
@@ -57,6 +58,11 @@ export default function Home() {
   const [taskAnalysisLoading, setTaskAnalysisLoading] = useState(false);
   const [taskAnalysisError, setTaskAnalysisError] = useState("");
   const [approvedTaskId, setApprovedTaskId] = useState("");
+  const [fixApprovalToken, setFixApprovalToken] = useState("");
+  const [fixPreview, setFixPreview] = useState<FixPreview|null>(null);
+  const [fixLoading, setFixLoading] = useState(false);
+  const [fixError, setFixError] = useState("");
+  const [pullRequestUrl, setPullRequestUrl] = useState("");
 
   const loadTasks = useCallback(async () => {
     setSource("loading");
@@ -166,14 +172,39 @@ export default function Home() {
   }
 
   async function analyzeTask(task:Task) {
-    setSelectedTask(task); setTaskAgentAnalysis(null); setTaskAnalysisError(""); setApprovedTaskId(""); setTaskAnalysisLoading(true);
+    setSelectedTask(task); setTaskAgentAnalysis(null); setTaskAnalysisError(""); setApprovedTaskId(""); setFixApprovalToken(""); setFixPreview(null); setFixError(""); setPullRequestUrl(""); setTaskAnalysisLoading(true);
     try {
       const response = await fetch("/api/tasks/analyze", { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ taskId:task.id }) });
-      const data = await response.json() as { analysis?:TaskAgentAnalysis; error?:string };
+      const data = await response.json() as { analysis?:TaskAgentAnalysis; approvalToken?:string|null; error?:string };
       if (!response.ok || !data.analysis) throw new Error(data.error || "Analysis failed");
       setTaskAgentAnalysis(data.analysis);
+      setFixApprovalToken(data.approvalToken || "");
     } catch (error) { setTaskAnalysisError(error instanceof Error ? error.message : "unknown_error"); }
     finally { setTaskAnalysisLoading(false); }
+  }
+
+  async function confirmModification() {
+    if (!selectedTask || !fixApprovalToken || fixLoading) return;
+    setFixLoading(true); setFixError(""); setApprovedTaskId(selectedTask.id);
+    try {
+      const response = await fetch("/api/tasks/fix/prepare", { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ taskId:selectedTask.id, approvalToken:fixApprovalToken }) });
+      const data = await response.json() as Partial<FixPreview> & { error?:string };
+      if (!response.ok || !data.pushToken || !data.diff) throw new Error(data.error || "Fix preparation failed");
+      setFixPreview(data as FixPreview);
+    } catch (error) { setFixError(error instanceof Error ? error.message : "unknown_error"); setApprovedTaskId(""); }
+    finally { setFixLoading(false); }
+  }
+
+  async function pushFixBranch() {
+    if (!selectedTask || !fixPreview || fixLoading) return;
+    setFixLoading(true); setFixError("");
+    try {
+      const response = await fetch("/api/tasks/fix/push", { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ taskId:selectedTask.id, pushToken:fixPreview.pushToken }) });
+      const data = await response.json() as { pullRequestUrl?:string; error?:string };
+      if (!response.ok || !data.pullRequestUrl) throw new Error(data.error || "Push failed");
+      setPullRequestUrl(data.pullRequestUrl);
+    } catch (error) { setFixError(error instanceof Error ? error.message : "unknown_error"); }
+    finally { setFixLoading(false); }
   }
 
   return (
@@ -267,8 +298,11 @@ export default function Home() {
               <section><h3>驗證方式</h3><ol>{taskAgentAnalysis.validation_steps.map((item) => <li key={item}>{item}</li>)}</ol></section>
               <section><h3>實際檢查檔案</h3>{taskAgentAnalysis.inspected_files.length ? <ul className="fileList">{taskAgentAnalysis.inspected_files.map((item) => <li key={item}><code>{item}</code></li>)}</ul> : <p>Issue 沒有提供可安全讀取的程式檔案路徑。</p>}</section>
               {!!taskAgentAnalysis.blocked_by.length && <section><h3>目前缺少</h3><ul>{taskAgentAnalysis.blocked_by.map((item) => <li key={item}>{item}</li>)}</ul></section>}
-              {approvedTaskId === selectedTask.id && <p className="approvalConfirmed">修改方向已確認。尚未執行程式修改或建立分支。</p>}
-              <div className="drawerActions"><a href={selectedTask.notionUrl} target="_blank" rel="noreferrer">開啟 Notion</a><button disabled={!taskAgentAnalysis.eligible_for_small_fix || approvedTaskId === selectedTask.id} onClick={() => setApprovedTaskId(selectedTask.id)}>{approvedTaskId === selectedTask.id ? "已確認修改方向" : "確認修改方向"}</button></div>
+              {fixLoading && <p className="approvalConfirmed">{fixPreview ? "正在 Push 分支並建立 Draft PR…" : "Coding Agent 正在隔離分支修改並執行測試，可能需要數分鐘…"}</p>}
+              {fixError && <p className="fixError">執行失敗：{fixError}</p>}
+              {fixPreview && <section className="fixPreview"><h3>修正預覽</h3><p>分支：<code>{fixPreview.branch}</code></p><p>變更檔案：{fixPreview.changedFiles.join("、")}</p><details><summary>測試結果</summary><pre>{fixPreview.testSummary}</pre></details><details open><summary>Git Diff</summary><pre>{fixPreview.diff}</pre></details></section>}
+              {pullRequestUrl && <p className="approvalConfirmed">Draft PR 已建立：<a href={pullRequestUrl} target="_blank" rel="noreferrer">開啟 Pull Request ↗</a></p>}
+              <div className="drawerActions"><a href={selectedTask.notionUrl} target="_blank" rel="noreferrer">開啟 Notion</a>{fixPreview && !pullRequestUrl ? <button disabled={fixLoading} onClick={() => void pushFixBranch()}>確認 Push 並建立 Draft PR</button> : <button disabled={!taskAgentAnalysis.eligible_for_small_fix || !fixApprovalToken || fixLoading || approvedTaskId === selectedTask.id} onClick={() => void confirmModification()}>{fixLoading ? "執行中…" : approvedTaskId === selectedTask.id ? "修改已完成" : "確認並執行修正"}</button>}</div>
             </div>}
           </aside>
         </div>}

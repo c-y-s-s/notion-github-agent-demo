@@ -1,6 +1,7 @@
 import { getGithubWorkItemContext } from "../../../../lib/github";
 import { getGithubRepositoryContext } from "../../../../lib/repository-context";
 import { getTaskDataset } from "../../../../lib/task-data";
+import { createFixApproval } from "../../../../lib/fix-approvals";
 
 type OpenAIOutput = { type:string; name?:string; arguments?:string };
 
@@ -67,7 +68,20 @@ export async function POST(request:Request) {
     if (!response.ok) throw new Error(data.error?.message || `OpenAI HTTP ${response.status}`);
     const call = (data.output || []).find((item) => item.type === "function_call" && item.name === "submit_task_analysis");
     if (!call?.arguments) throw new Error("Agent returned no structured analysis");
-    return Response.json({ task:{ id:task.id, title:task.title, notionUrl:task.notionUrl }, analysis:JSON.parse(call.arguments) });
+    const analysis = JSON.parse(call.arguments) as { summary:string; proposed_changes:string[]; validation_steps:string[]; eligible_for_small_fix:boolean; inspected_files:string[] };
+    const availableFiles = new Set(repositoryContext.files.map((file) => file.path));
+    const allowedFiles = analysis.inspected_files.filter((file) => availableFiles.has(file) && file !== "package.json").slice(0, 3);
+    const issueNumber = task.githubLinks.map((url) => url.match(/\/issues\/(\d+)/)?.[1]).find(Boolean);
+    const approvalToken = analysis.eligible_for_small_fix && allowedFiles.length ? createFixApproval({
+      taskId:task.id,
+      title:task.title,
+      issueNumber:issueNumber ? Number(issueNumber) : null,
+      allowedFiles,
+      summary:analysis.summary,
+      proposedChanges:analysis.proposed_changes,
+      validationSteps:analysis.validation_steps,
+    }) : null;
+    return Response.json({ task:{ id:task.id, title:task.title, notionUrl:task.notionUrl }, analysis, approvalToken });
   } catch (error) {
     return Response.json({ error:error instanceof Error ? error.message : "Task analysis failed" }, { status:502 });
   }
