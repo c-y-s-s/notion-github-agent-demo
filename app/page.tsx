@@ -7,7 +7,7 @@ type Status = "未開始" | "執行中" | "已完成";
 type Tone = "neutral" | "review" | "success" | "risk";
 type ComputedTag = "due_this_week" | "completed_this_week" | "overdue" | "no_due";
 type Evidence = { label: string; detail: string; tone: Tone; url?: string; conflict: boolean };
-type Analysis = { code:string; severity:"none"|"info"|"warning"|"conflict"; summary:string };
+type Analysis = { code:string; severity:"none"|"info"|"warning"|"conflict"; summary:string; suggestedStatus:Status|null; confidence:number; ruleVersion:string };
 type Task = { title: string; project: string; status: Status; due: string; computedTags:ComputedTag[]; evidences: Evidence[]; analysis:Analysis; conflict: boolean };
 type ApiTask = {
   title:string; project:string; status:Status; due:string; githubLinks:string[]; computedTags:ComputedTag[];
@@ -20,7 +20,7 @@ type ChatMessage = { role:"user"|"agent"; text:string; tools?:string[] };
 const filters = ["全部", "本週", "逾期", "無期限", "未開始", "執行中", "已完成"] as const;
 
 function AgentMarkdown({ children }:{ children:string }) {
-  return <div className="agentMarkdown"><Markdown components={{ a:({ node, ...props }) => <a {...props} target="_blank" rel="noreferrer" /> }}>{children}</Markdown></div>;
+  return <div className="agentMarkdown"><Markdown components={{ a:({ href, children:linkText }) => <a href={href} target="_blank" rel="noreferrer">{linkText}</a> }}>{children}</Markdown></div>;
 }
 
 function normalizeTask(task: ApiTask): Task {
@@ -178,12 +178,19 @@ export default function Home() {
                 <div className="taskName"><strong>{task.title}</strong><small>{task.project}</small></div>
                 <div><span className={`status status-${task.status}`}>{task.status}</span></div>
                 <span>{task.due}</span>
-                <div className="githubEvidenceList">{task.evidences.map((item, index) => (
-                  <div className="githubEvidence" key={`${item.url || item.label}-${index}`}>
-                    <strong>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">{item.label} ↗</a> : item.label}</strong>
-                    <small className={item.tone}>{item.detail}</small>
+                <div className="githubEvidenceList">
+                  {task.evidences.map((item, index) => (
+                    <div className="githubEvidence" key={`${item.url || item.label}-${index}`}>
+                      <strong>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">{item.label} ↗</a> : item.label}</strong>
+                      <small className={item.tone}>{item.detail}</small>
+                    </div>
+                  ))}
+                  <div className={`analysisResult analysis-${task.analysis.severity}`}>
+                    <span>{task.analysis.suggestedStatus ? `建議 ${task.analysis.suggestedStatus}` : task.analysis.code === "consistent" ? "狀態一致" : "證據不足"}</span>
+                    <strong>{Math.round(task.analysis.confidence * 100)}%</strong>
+                    <small>{task.analysis.summary}</small>
                   </div>
-                ))}</div>
+                </div>
               </article>
             ))}
           </div>

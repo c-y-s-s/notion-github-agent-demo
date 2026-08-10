@@ -1,6 +1,6 @@
 # Traceboard — Notion × GitHub Agent Demo
 
-這是一個用來驗證「Notion 任務如何連結 GitHub 開發證據」的最小展示專案。目前使用假資料，下一階段才接 Notion 與 GitHub API。
+這是一個用來驗證「Notion 任務如何連結 GitHub 開發證據」的個人工作助理。介面只讀取真實 Notion 與 GitHub 資料，不顯示假資料。
 
 ## 目前包含
 
@@ -8,6 +8,9 @@
 - Notion 狀態、GitHub PR 與 CI 證據並列
 - 狀態矛盾提示與 Agent 建議
 - 響應式 Dashboard
+- 規則式建議狀態、信心程度與版本化判斷
+- OpenAI Agent 對話與每日摘要
+- Slack 每日摘要手動發送
 
 ## 本機執行
 
@@ -28,13 +31,10 @@ npm run dev
 4. 將 Issue／PR URL 填入 Notion Task 的 `GitHub Links`。
 5. 後續整合程式以這些明確 URL 取得證據，不從 Repository 活動猜測 Task。
 
-## 下一階段
+## 尚未完成
 
-- Notion Integration 與 Data Source schema mapping
-- GitHub Issue／PR URL parser
-- GitHub PR、Review 與 Checks 證據（公開 Repo 不需 Token）
-- Asia/Taipei 動態週期、本週完成、逾期與無期限分類
-- GitHub 60 秒記憶體快取與 rate-limit 錯誤分類
-- OpenAI Responses API Agent Chat 與唯讀 function tools
-- 規則式 evidence analysis
-- 固定格式週報
+- 固定格式週報與匯出
+- Task Evidence 詳細頁
+- 連線狀態與錯誤分類介面
+- Slack 去重與雲端排程
+- 人工確認後寫回 Notion（非 MVP）
