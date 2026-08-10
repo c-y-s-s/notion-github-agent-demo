@@ -7,6 +7,9 @@ export type GithubEvidence = {
   conflict: boolean;
 };
 
+const responseCache = new Map<string, { expiresAt:number; value:unknown }>();
+const cacheTtl = Number(process.env.GITHUB_CACHE_TTL_MS || 60_000);
+
 type GithubLink = { owner: string; repo: string; kind: "issues" | "pull"; number: number; url: string };
 
 function parseGithubLink(value: string): GithubLink | null {
@@ -33,9 +36,16 @@ function headers() {
 }
 
 async function githubFetch<T>(path: string): Promise<T> {
+  const cached = responseCache.get(path);
+  if (cached && cached.expiresAt > Date.now()) return cached.value as T;
   const response = await fetch(`https://api.github.com${path}`, { headers: headers(), cache: "no-store" });
-  if (!response.ok) throw new Error(`GitHub API ${response.status}`);
-  return response.json() as Promise<T>;
+  if (!response.ok) {
+    const rateLimited = response.status === 403 && response.headers.get("x-ratelimit-remaining") === "0";
+    throw new Error(rateLimited ? "rate_limited" : response.status === 404 ? "not_found_or_no_permission" : `github_http_${response.status}`);
+  }
+  const value = await response.json() as T;
+  responseCache.set(path, { expiresAt: Date.now() + cacheTtl, value });
+  return value;
 }
 
 export async function getGithubEvidence(value: string, notionStatus: string): Promise<GithubEvidence | null> {
