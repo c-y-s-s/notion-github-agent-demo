@@ -18,6 +18,8 @@ npm install
 npm run dev
 ```
 
+複製 `.env.example` 為 `.env.local`，填入 `NOTION_TOKEN` 與 `NOTION_DATA_SOURCE_ID`。`.env.local` 已被 Git 忽略，請勿把 Token 提交到 GitHub。
+
 ## 建議的 GitHub 測試流程
 
 1. 將專案上傳到 GitHub。
@@ -30,5 +32,6 @@ npm run dev
 
 - Notion Integration 與 Data Source schema mapping
 - GitHub Issue／PR URL parser
+- GitHub PR、Review 與 Checks 證據（公開 Repo 不需 Token）
 - 規則式 evidence analysis
 - 固定格式週報
