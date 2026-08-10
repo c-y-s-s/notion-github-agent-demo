@@ -59,6 +59,8 @@ h2 { margin:0; font-size:17px; letter-spacing:-.015em; }
 .taskName button { padding:0; border:0; color:inherit; background:transparent; text-align:left; }
 .taskName button:hover strong { color:var(--blue); text-decoration:underline; }
 .taskName strong,.githubEvidence strong { display:block; font-size:14px; }
+.workType { display:inline-block; margin-top:6px; padding:2px 5px; border-radius:3px; color:#4b5563; background:#eef0f2; font-size:10px; font-weight:700; }
+.type-Bug { color:#9f241b; background:#fde8e6; }.type-Feature { color:#235bb7; background:#e5edfb; }.type-Docs { color:#6b4aa0; background:#eee8f7; }.type-Research { color:#8a6414; background:#fff0c9; }.type-Chore { color:#4b5563; background:#e8eaed; }
 .githubEvidence a { color:var(--ink); text-decoration:none; }.githubEvidence a:hover { color:var(--blue); text-decoration:underline; }
 .taskName small,.githubEvidence small { display:block; margin-top:6px; color:var(--muted); font-size:12px; }
 .githubEvidenceList { display:grid; gap:12px; padding:12px 0; }

@@ -19,6 +19,7 @@ export type NormalizedTask = {
   id: string;
   title: string;
   project: string;
+  workType: "Feature" | "Bug" | "Chore" | "Docs" | "Research" | "未分類";
   status: "未開始" | "執行中" | "已完成";
   due: string;
   dueRaw: string | null;
@@ -36,6 +37,7 @@ const propertyNames = {
   completedAt: process.env.NOTION_COMPLETED_AT_PROPERTY || "Completed At",
   repository: process.env.NOTION_GITHUB_REPOSITORY_PROPERTY || "GitHub Repository",
   githubLinks: process.env.NOTION_GITHUB_LINKS_PROPERTY || "GitHub Links",
+  workType: process.env.NOTION_WORK_TYPE_PROPERTY || "Work Type",
 };
 
 function textValue(property?: NotionProperty) {
@@ -55,6 +57,10 @@ function normalizeStatus(value?: string): NormalizedTask["status"] {
   return "未開始";
 }
 
+function normalizeWorkType(value?:string):NormalizedTask["workType"] {
+  return ["Feature", "Bug", "Chore", "Docs", "Research"].includes(value || "") ? value as NormalizedTask["workType"] : "未分類";
+}
+
 function formatDate(value?: string) {
   if (!value) return "未設定";
   return new Intl.DateTimeFormat("zh-TW", { month: "numeric", day: "numeric", timeZone: "Asia/Taipei" }).format(new Date(value));
@@ -72,6 +78,7 @@ function normalizePage(page: NotionPage): NormalizedTask {
     id: page.id,
     title: textValue(properties[propertyNames.task]) || "未命名 Task",
     project: projectValue(properties[propertyNames.project]),
+    workType: normalizeWorkType(properties[propertyNames.workType]?.select?.name),
     status: normalizeStatus(properties[propertyNames.status]?.status?.name || properties[propertyNames.status]?.select?.name),
     due: formatDate(dueRaw || undefined),
     dueRaw,
@@ -120,7 +127,7 @@ export async function createNotionTaskFromGithubIssue(issue:{ title:string; url:
         [propertyNames.task]:{ title:[{ text:{ content:issue.title } }] },
         [propertyNames.project]:{ select:{ name:process.env.NOTION_SYNC_PROJECT || "Notion GitHub Agent" } },
         [propertyNames.status]:{ status:{ name:"未開始" } },
-        [process.env.NOTION_WORK_TYPE_PROPERTY || "Work Type"]:{ select:{ name:issue.workType } },
+        [propertyNames.workType]:{ select:{ name:issue.workType } },
         [propertyNames.repository]:{ url:issue.repositoryUrl },
         [propertyNames.githubLinks]:{ rich_text:[{ text:{ content:issue.url, link:{ url:issue.url } } }] },
       },

@@ -8,9 +8,10 @@ type Tone = "neutral" | "review" | "success" | "risk";
 type ComputedTag = "due_this_week" | "completed_this_week" | "overdue" | "no_due";
 type Evidence = { label: string; detail: string; tone: Tone; url?: string; conflict: boolean };
 type Analysis = { code:string; severity:"none"|"info"|"warning"|"conflict"; summary:string; suggestedStatus:Status|null; confidence:number; ruleVersion:string };
-type Task = { id:string; title: string; project: string; status: Status; due: string; notionUrl:string; computedTags:ComputedTag[]; evidences: Evidence[]; analysis:Analysis; conflict: boolean };
+type WorkType = "Feature"|"Bug"|"Chore"|"Docs"|"Research"|"未分類";
+type Task = { id:string; title: string; project: string; workType:WorkType; status: Status; due: string; notionUrl:string; computedTags:ComputedTag[]; evidences: Evidence[]; analysis:Analysis; conflict: boolean };
 type ApiTask = {
-  id:string; title:string; project:string; status:Status; due:string; notionUrl:string; githubLinks:string[]; computedTags:ComputedTag[];
+  id:string; title:string; project:string; workType:WorkType; status:Status; due:string; notionUrl:string; githubLinks:string[]; computedTags:ComputedTag[];
   githubEvidence?:Array<{label:string;detail:string;tone:Tone;url:string;conflict:boolean}>;
   githubErrors?:Array<{url:string;message:string}>;
   analysis:Analysis;
@@ -232,7 +233,7 @@ export default function Home() {
             {source === "notion" && !visibleTasks.length && <div className="dataState">沒有符合目前篩選條件的 Task。</div>}
             {visibleTasks.map((task) => (
               <article className="tableRow" key={task.title}>
-                <div className="taskName"><button onClick={() => void analyzeTask(task)}><strong>{task.title}</strong><small>{task.project}</small></button></div>
+                <div className="taskName"><button onClick={() => void analyzeTask(task)}><strong>{task.title}</strong><span className={`workType type-${task.workType}`}>{task.workType}</span><small>{task.project}</small></button></div>
                 <div><span className={`status status-${task.status}`}>{task.status}</span></div>
                 <span>{task.due}</span>
                 <div className="githubEvidenceList">

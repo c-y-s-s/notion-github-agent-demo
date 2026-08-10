@@ -39,7 +39,7 @@ export async function POST(request:Request) {
       try { return await getGithubWorkItemContext(url); } catch { return null; }
     }))).filter(Boolean);
     const safeInput = {
-      task:{ title:task.title, project:task.project, status:task.status, due:task.dueRaw, computed_tags:task.computedTags },
+      task:{ title:task.title, project:task.project, work_type:task.workType, status:task.status, due:task.dueRaw, computed_tags:task.computedTags },
       deterministic_analysis:task.analysis,
       github_evidence:task.githubEvidence.map((item) => ({ label:item.label, detail:item.detail, phase:item.phase, url:item.url })),
       github_errors:task.githubErrors,
