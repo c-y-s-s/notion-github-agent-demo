@@ -22,7 +22,7 @@ export function extractLinkedPullRequestUrls(events:TimelineEvent[]) {
   }))];
 }
 
-function parseGithubLink(value: string): GithubLink | null {
+export function parseGithubLink(value: string): GithubLink | null {
   try {
     const url = new URL(value);
     if (url.protocol !== "https:" || url.hostname !== "github.com") return null;
@@ -33,6 +33,21 @@ function parseGithubLink(value: string): GithubLink | null {
   } catch {
     return null;
   }
+}
+
+export async function getGithubWorkItemContext(value:string) {
+  const link = parseGithubLink(value);
+  if (!link) return null;
+  const item = await githubFetch<{title:string;body?:string|null;state:string;labels?:Array<{name?:string}>;pull_request?:unknown}>(`/repos/${encodeURIComponent(link.owner)}/${encodeURIComponent(link.repo)}/issues/${link.number}`);
+  return {
+    kind:item.pull_request ? "pull_request" : "issue",
+    number:link.number,
+    title:item.title,
+    body:(item.body || "").slice(0, 5000),
+    state:item.state,
+    labels:(item.labels || []).map((label) => label.name || "").filter(Boolean),
+    url:link.url,
+  };
 }
 
 function headers() {

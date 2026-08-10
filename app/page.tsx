@@ -8,15 +8,16 @@ type Tone = "neutral" | "review" | "success" | "risk";
 type ComputedTag = "due_this_week" | "completed_this_week" | "overdue" | "no_due";
 type Evidence = { label: string; detail: string; tone: Tone; url?: string; conflict: boolean };
 type Analysis = { code:string; severity:"none"|"info"|"warning"|"conflict"; summary:string; suggestedStatus:Status|null; confidence:number; ruleVersion:string };
-type Task = { title: string; project: string; status: Status; due: string; computedTags:ComputedTag[]; evidences: Evidence[]; analysis:Analysis; conflict: boolean };
+type Task = { id:string; title: string; project: string; status: Status; due: string; notionUrl:string; computedTags:ComputedTag[]; evidences: Evidence[]; analysis:Analysis; conflict: boolean };
 type ApiTask = {
-  title:string; project:string; status:Status; due:string; githubLinks:string[]; computedTags:ComputedTag[];
+  id:string; title:string; project:string; status:Status; due:string; notionUrl:string; githubLinks:string[]; computedTags:ComputedTag[];
   githubEvidence?:Array<{label:string;detail:string;tone:Tone;url:string;conflict:boolean}>;
   githubErrors?:Array<{url:string;message:string}>;
   analysis:Analysis;
 };
 type ChatMessage = { role:"user"|"agent"; text:string; tools?:string[] };
 type SyncIssue = { number:number; title:string; url:string; workType:string };
+type TaskAgentAnalysis = { summary:string; likely_cause:string; proposed_changes:string[]; validation_steps:string[]; risk_level:"low"|"medium"|"high"; eligible_for_small_fix:boolean; eligibility_reason:string; blocked_by:string[] };
 
 const filters = ["全部", "本週", "逾期", "無期限", "未開始", "執行中", "已完成"] as const;
 
@@ -50,6 +51,10 @@ export default function Home() {
   const [syncIssues, setSyncIssues] = useState<SyncIssue[]>([]);
   const [syncLoading, setSyncLoading] = useState(false);
   const [syncResult, setSyncResult] = useState("");
+  const [selectedTask, setSelectedTask] = useState<Task|null>(null);
+  const [taskAgentAnalysis, setTaskAgentAnalysis] = useState<TaskAgentAnalysis|null>(null);
+  const [taskAnalysisLoading, setTaskAnalysisLoading] = useState(false);
+  const [taskAnalysisError, setTaskAnalysisError] = useState("");
 
   const loadTasks = useCallback(async () => {
     setSource("loading");
@@ -158,6 +163,17 @@ export default function Home() {
     finally { setSyncLoading(false); }
   }
 
+  async function analyzeTask(task:Task) {
+    setSelectedTask(task); setTaskAgentAnalysis(null); setTaskAnalysisError(""); setTaskAnalysisLoading(true);
+    try {
+      const response = await fetch("/api/tasks/analyze", { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ taskId:task.id }) });
+      const data = await response.json() as { analysis?:TaskAgentAnalysis; error?:string };
+      if (!response.ok || !data.analysis) throw new Error(data.error || "Analysis failed");
+      setTaskAgentAnalysis(data.analysis);
+    } catch (error) { setTaskAnalysisError(error instanceof Error ? error.message : "unknown_error"); }
+    finally { setTaskAnalysisLoading(false); }
+  }
+
   return (
     <main>
       <header className="topbar">
@@ -216,7 +232,7 @@ export default function Home() {
             {source === "notion" && !visibleTasks.length && <div className="dataState">沒有符合目前篩選條件的 Task。</div>}
             {visibleTasks.map((task) => (
               <article className="tableRow" key={task.title}>
-                <div className="taskName"><strong>{task.title}</strong><small>{task.project}</small></div>
+                <div className="taskName"><button onClick={() => void analyzeTask(task)}><strong>{task.title}</strong><small>{task.project}</small></button></div>
                 <div><span className={`status status-${task.status}`}>{task.status}</span></div>
                 <span>{task.due}</span>
                 <div className="githubEvidenceList">
@@ -236,6 +252,22 @@ export default function Home() {
             ))}
           </div>
         </section>
+        {selectedTask && <div className="taskDrawerBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedTask(null); }}>
+          <aside className="taskDrawer" role="dialog" aria-modal="true" aria-labelledby="task-analysis-title">
+            <div className="taskDrawerHead"><div><small>Task 初步分析</small><h2 id="task-analysis-title">{selectedTask.title}</h2></div><button onClick={() => setSelectedTask(null)} aria-label="關閉分析">×</button></div>
+            {taskAnalysisLoading && <div className="drawerState">Agent 正在整理 Task、Issue 與 PR 證據…</div>}
+            {taskAnalysisError && <div className="drawerState errorState">分析失敗：{taskAnalysisError}</div>}
+            {taskAgentAnalysis && <div className="taskAnalysisBody">
+              <div className="analysisDecision"><span className={`risk-${taskAgentAnalysis.risk_level}`}>{taskAgentAnalysis.risk_level === "low" ? "低風險" : taskAgentAnalysis.risk_level === "medium" ? "中風險" : "高風險"}</span><strong>{taskAgentAnalysis.eligible_for_small_fix ? "符合小型修正候選" : "目前不適合自動修正"}</strong><p>{taskAgentAnalysis.eligibility_reason}</p></div>
+              <section><h3>問題摘要</h3><p>{taskAgentAnalysis.summary}</p></section>
+              <section><h3>可能原因</h3><p>{taskAgentAnalysis.likely_cause}</p></section>
+              <section><h3>建議修改方向</h3><ol>{taskAgentAnalysis.proposed_changes.map((item) => <li key={item}>{item}</li>)}</ol></section>
+              <section><h3>驗證方式</h3><ol>{taskAgentAnalysis.validation_steps.map((item) => <li key={item}>{item}</li>)}</ol></section>
+              {!!taskAgentAnalysis.blocked_by.length && <section><h3>目前缺少</h3><ul>{taskAgentAnalysis.blocked_by.map((item) => <li key={item}>{item}</li>)}</ul></section>}
+              <div className="drawerActions"><a href={selectedTask.notionUrl} target="_blank" rel="noreferrer">開啟 Notion</a><button disabled title="下一階段才會開放程式修改">確認修改方向（尚未開放）</button></div>
+            </div>}
+          </aside>
+        </div>}
 
         <section className="ruleNotice">
           <div><strong>需要確認</strong><h2>{attention[0] ? `「${attention[0].title}」` : "目前沒有需要人工確認的項目"}</h2><p>{attention[0]?.analysis.summary || "GitHub 證據只代表工程活動；PR 合併後仍需確認部署、QA 或驗收。"}</p></div>
