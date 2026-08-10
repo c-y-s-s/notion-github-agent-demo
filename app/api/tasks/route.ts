@@ -6,13 +6,18 @@ export async function GET() {
     const result = await queryNotionTasks();
     if (!result.configured) return Response.json(result);
     const tasks = await Promise.all(result.tasks.map(async (task) => {
-      const link = task.githubLinks[0];
-      if (!link) return { ...task, githubEvidence: null, githubError: null };
-      try {
-        return { ...task, githubEvidence: await getGithubEvidence(link, task.status), githubError: null };
-      } catch (error) {
-        return { ...task, githubEvidence: null, githubError: error instanceof Error ? error.message : "GitHub query failed" };
-      }
+      const results = await Promise.all(task.githubLinks.map(async (link) => {
+        try {
+          return { link, evidence: await getGithubEvidence(link, task.status), error: null };
+        } catch (error) {
+          return { link, evidence: null, error: error instanceof Error ? error.message : "GitHub query failed" };
+        }
+      }));
+      return {
+        ...task,
+        githubEvidence: results.flatMap((result) => result.evidence ? [result.evidence] : []),
+        githubErrors: results.flatMap((result) => result.error ? [{ url: result.link, message: result.error }] : []),
+      };
     }));
     return Response.json({ configured: true, tasks });
   } catch (error) {
