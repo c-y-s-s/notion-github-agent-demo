@@ -16,3 +16,11 @@ test("this_week scope never returns unrelated no-due tasks", async () => {
   assert.equal("count" in result ? result.count : -1, 1);
   assert.deepEqual("tasks" in result ? result.tasks.map((task) => task.title) : [], ["Due"]);
 });
+
+test("daily brief prioritizes overdue, today, then confirmation without duplicates", async () => {
+  const overdue = { ...dataset.tasks[0], title:"Overdue", due:"8/9", dueRaw:"2026-08-09", computedTags:["overdue" as const], analysis:{code:"likely_in_progress" as const,severity:"warning" as const,summary:"review"} };
+  const dueToday = { ...dataset.tasks[0], title:"Today", due:"8/10", dueRaw:"2026-08-10", computedTags:["due_this_week" as const] };
+  const result = await runAgentTool("generate_daily_brief", { project:null }, { ...dataset, tasks:[overdue, dueToday, dataset.tasks[1]] });
+  assert.deepEqual("counts" in result ? result.counts : {}, { due_today:1, overdue:1, needs_confirmation:1 });
+  assert.deepEqual("priority_actions" in result ? result.priority_actions.map((task) => task.title) : [], ["Overdue", "Today"]);
+});

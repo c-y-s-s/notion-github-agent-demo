@@ -37,6 +37,8 @@ export default function Home() {
   const [question, setQuestion] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [dailySummary, setDailySummary] = useState("");
+  const [dailyLoading, setDailyLoading] = useState(false);
 
   const loadTasks = useCallback(async () => {
     setSource("loading");
@@ -93,6 +95,19 @@ export default function Home() {
     } finally { setChatLoading(false); }
   }
 
+  async function generateDailySummary() {
+    if (dailyLoading) return;
+    setDailyLoading(true);
+    try {
+      const response = await fetch("/api/agent", { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ message:"產生今天的每日工作摘要，列出概況與最多三項優先行動，並說明原因。" }) });
+      const data = await response.json() as { answer?:string; error?:string };
+      if (!response.ok || !data.answer) throw new Error(data.error || "Agent failed");
+      setDailySummary(data.answer);
+    } catch (error) {
+      setDailySummary(`目前無法產生摘要：${error instanceof Error ? error.message : "unknown_error"}`);
+    } finally { setDailyLoading(false); }
+  }
+
   return (
     <main>
       <header className="topbar">
@@ -111,6 +126,14 @@ export default function Home() {
           <article><span>本週完成</span><strong>{source === "loading" ? "—" : completedThisWeek.length}</strong><small className="green">依 Completed At</small></article>
           <article><span>已逾期</span><strong>{source === "loading" ? "—" : overdue.length}</strong><small className="red">截止日已過且未完成</small></article>
           <article className="riskMetric"><span>需要確認</span><strong>{source === "loading" ? "—" : attention.length}</strong><small className="red">建議或狀態矛盾</small></article>
+        </section>
+
+        <section className="dailyBrief" aria-labelledby="daily-brief-title">
+          <div className="dailyBriefHead">
+            <div><h2 id="daily-brief-title">每日工作摘要</h2><p>依逾期、今天到期與狀態矛盾整理，不會修改 Notion。</p></div>
+            <button onClick={() => void generateDailySummary()} disabled={dailyLoading || source !== "notion"}>{dailyLoading ? "整理中…" : dailySummary ? "重新產生" : "產生今日摘要"}</button>
+          </div>
+          {dailySummary ? <div className="dailyBriefContent">{dailySummary}</div> : <p className="dailyBriefEmpty">產生後會顯示今日概況，以及最多三項需要優先處理的工作。</p>}
         </section>
 
         <section className="workspace">

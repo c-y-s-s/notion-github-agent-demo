@@ -1,13 +1,14 @@
 import { getTaskDataset } from "./task-data";
 
 type Dataset = Awaited<ReturnType<typeof getTaskDataset>>;
-type ToolName = "query_tasks" | "find_overdue_tasks" | "find_status_conflicts" | "generate_weekly_summary";
+type ToolName = "query_tasks" | "find_overdue_tasks" | "find_status_conflicts" | "generate_weekly_summary" | "generate_daily_brief";
 
 const definitions = ([
   ["query_tasks", "查詢真實 Notion Task 與 GitHub 證據。必須用 scope 限制查詢範圍；使用者提到本週時用 this_week。", true],
   ["find_overdue_tasks", "找出截止日已過且尚未完成的 Task。"],
   ["find_status_conflicts", "找出 Notion 狀態與 GitHub 證據的矛盾或待確認項目。"],
   ["generate_weekly_summary", "計算本週預計、本週完成、逾期與無期限摘要。"],
+  ["generate_daily_brief", "產生今天的工作摘要：今天到期、逾期、狀態待確認，以及最多三項優先行動。"],
 ] as const);
 
 export const agentTools = definitions.map(([name, description, hasScope]) => ({
@@ -45,6 +46,23 @@ export async function runAgentTool(name:ToolName, args:{project:string|null;scop
   }
   if (name === "find_overdue_tasks") return { period:data.period, tasks:tasks.filter((task) => task.computedTags.includes("overdue")).map(publicTask) };
   if (name === "find_status_conflicts") return { tasks:tasks.filter((task) => ["warning","conflict"].includes(task.analysis.severity)).map(publicTask) };
+  if (name === "generate_daily_brief") {
+    const dueToday = tasks.filter((task) => task.dueRaw?.slice(0, 10) === data.period.today && task.status !== "已完成");
+    const overdue = tasks.filter((task) => task.computedTags.includes("overdue"));
+    const needsConfirmation = tasks.filter((task) => ["warning","conflict"].includes(task.analysis.severity));
+    const priority = [...overdue, ...dueToday, ...needsConfirmation]
+      .filter((task, index, all) => all.findIndex((candidate) => candidate.title === task.title && candidate.project === task.project) === index)
+      .slice(0, 3);
+    return {
+      date:data.period.today,
+      counts:{ due_today:dueToday.length, overdue:overdue.length, needs_confirmation:needsConfirmation.length },
+      due_today:dueToday.map(publicTask),
+      overdue:overdue.map(publicTask),
+      needs_confirmation:needsConfirmation.map(publicTask),
+      priority_actions:priority.map(publicTask),
+      note:priority.length ? "優先順序為逾期、今天到期、狀態待確認；最終安排由使用者決定。" : "今天沒有偵測到需要立即處理的項目。",
+    };
+  }
   return {
     period:data.period,
     counts:{
