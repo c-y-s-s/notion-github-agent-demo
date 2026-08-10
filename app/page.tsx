@@ -96,18 +96,17 @@ export default function Home() {
   return (
     <main>
       <header className="topbar">
-        <a className="brand" href="#top" aria-label="Traceboard 首頁"><span className="brandMark">T</span><span>Traceboard</span></a>
+        <a className="brand" href="#top" aria-label="Traceboard 首頁">Traceboard</a>
         <div className={`connection ${source === "error" ? "connectionError" : ""}`}><span /> {connectionText}</div>
-        <button className="avatar" aria-label="使用者選單">LC</button>
       </header>
 
       <section className="shell" id="top">
-        <div className="hero">
-          <div><p className="eyebrow">本週工作台{weekLabel ? ` · ${weekLabel}` : ""}</p><h1>工作進度，有證據才算數。</h1><p className="lede">彙整 Notion 任務與 GitHub 開發活動，快速找出進度、阻塞與狀態矛盾。</p></div>
-          <button className="primary" onClick={() => void loadTasks()} disabled={source === "loading"}>{source === "loading" ? "同步中…" : "重新同步任務"}</button>
+        <div className="pageHeader">
+          <div><h1>工作進度</h1><p>{weekLabel ? `本週 · ${weekLabel}` : "正在取得本週範圍"}</p></div>
+          <button className="primary" onClick={() => void loadTasks()} disabled={source === "loading"}>{source === "loading" ? "同步中…" : "重新同步"}</button>
         </div>
 
-        <section className="metrics" aria-label="本週統計">
+        <section className="summaryBar" aria-label="本週統計">
           <article><span>本週預計</span><strong>{source === "loading" ? "—" : dueThisWeek.length}</strong><small>{new Set(dueThisWeek.map((task) => task.project)).size} 個專案</small></article>
           <article><span>本週完成</span><strong>{source === "loading" ? "—" : completedThisWeek.length}</strong><small className="green">依 Completed At</small></article>
           <article><span>已逾期</span><strong>{source === "loading" ? "—" : overdue.length}</strong><small className="red">截止日已過且未完成</small></article>
@@ -142,15 +141,14 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="insight">
-          <div className="agentIcon">A</div>
-          <div><p className="eyebrow">規則建議</p><h2>{attention[0] ? `請確認「${attention[0].title}」` : "目前沒有需要人工確認的項目"}</h2><p>{attention[0]?.analysis.summary || "GitHub 證據只代表工程活動；PR 合併後仍需確認部署、QA 或驗收。"}</p></div>
-          {(attention[0]?.evidences[0]?.url || firstConflictEvidence?.url) ? <a className="insightLink" href={attention[0]?.evidences[0]?.url || firstConflictEvidence?.url} target="_blank" rel="noreferrer">查看證據 →</a> : <span />}
+        <section className="ruleNotice">
+          <div><strong>需要確認</strong><h2>{attention[0] ? `「${attention[0].title}」` : "目前沒有需要人工確認的項目"}</h2><p>{attention[0]?.analysis.summary || "GitHub 證據只代表工程活動；PR 合併後仍需確認部署、QA 或驗收。"}</p></div>
+          {(attention[0]?.evidences[0]?.url || firstConflictEvidence?.url) ? <a href={attention[0]?.evidences[0]?.url || firstConflictEvidence?.url} target="_blank" rel="noreferrer">查看證據 →</a> : <span />}
         </section>
 
         <section className="agentPanel" aria-labelledby="agent-title">
           <div className="agentHeader">
-            <div><p className="eyebrow">TRACEBOARD AGENT</p><h2 id="agent-title">直接詢問你的專案狀態</h2><p>Agent 會先讀取 Notion 與 GitHub 工具結果，再產生有來源的回答。</p></div>
+            <div><h2 id="agent-title">詢問 Agent</h2><p>從 Notion 與 GitHub 查詢任務、逾期項目與狀態矛盾。</p></div>
             <span className="readOnlyBadge">唯讀模式</span>
           </div>
           {!messages.length && <div className="suggestions">
