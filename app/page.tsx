@@ -16,6 +16,7 @@ type ApiTask = {
   analysis:Analysis;
 };
 type ChatMessage = { role:"user"|"agent"; text:string; tools?:string[] };
+type SyncIssue = { number:number; title:string; url:string; workType:string };
 
 const filters = ["全部", "本週", "逾期", "無期限", "未開始", "執行中", "已完成"] as const;
 
@@ -46,6 +47,9 @@ export default function Home() {
   const [dailyLoading, setDailyLoading] = useState(false);
   const [slackLoading, setSlackLoading] = useState(false);
   const [slackResult, setSlackResult] = useState("");
+  const [syncIssues, setSyncIssues] = useState<SyncIssue[]>([]);
+  const [syncLoading, setSyncLoading] = useState(false);
+  const [syncResult, setSyncResult] = useState("");
 
   const loadTasks = useCallback(async () => {
     setSource("loading");
@@ -129,6 +133,31 @@ export default function Home() {
     } finally { setSlackLoading(false); }
   }
 
+  async function previewGithubSync() {
+    setSyncLoading(true); setSyncResult("");
+    try {
+      const response = await fetch("/api/sync/github-issues", { cache:"no-store" });
+      const data = await response.json() as { missing?:SyncIssue[]; error?:string };
+      if (!response.ok) throw new Error(data.error || "Preview failed");
+      setSyncIssues(data.missing || []);
+      setSyncResult(data.missing?.length ? "請確認以下項目，再匯入 Notion。" : "GitHub 與 Notion 已同步，沒有缺少的 Issue。");
+    } catch (error) { setSyncResult(`讀取失敗：${error instanceof Error ? error.message : "unknown_error"}`); }
+    finally { setSyncLoading(false); }
+  }
+
+  async function confirmGithubSync() {
+    if (!syncIssues.length) return;
+    setSyncLoading(true); setSyncResult("");
+    try {
+      const response = await fetch("/api/sync/github-issues", { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ issueNumbers:syncIssues.map((issue) => issue.number) }) });
+      const data = await response.json() as { created?:unknown[]; error?:string };
+      if (!response.ok) throw new Error(data.error || "Sync failed");
+      setSyncIssues([]); setSyncResult(`已建立 ${data.created?.length || 0} 筆 Notion Tasks。`);
+      await loadTasks();
+    } catch (error) { setSyncResult(`同步失敗：${error instanceof Error ? error.message : "unknown_error"}`); }
+    finally { setSyncLoading(false); }
+  }
+
   return (
     <main>
       <header className="topbar">
@@ -159,6 +188,18 @@ export default function Home() {
           </div>
           {slackResult && <p className={`slackResult ${slackResult.startsWith("已") ? "success" : "error"}`}>{slackResult}</p>}
           {dailySummary ? <div className="dailyBriefContent"><AgentMarkdown>{dailySummary}</AgentMarkdown></div> : <p className="dailyBriefEmpty">產生後會顯示今日概況，以及最多三項需要優先處理的工作。</p>}
+        </section>
+
+        <section className="syncPanel" aria-labelledby="sync-title">
+          <div className="syncHead">
+            <div><h2 id="sync-title">GitHub Issues → Notion</h2><p>只建立 Notion 尚未收錄的開啟中 Issue，不覆蓋既有 Task。</p></div>
+            <button onClick={() => void previewGithubSync()} disabled={syncLoading}>{syncLoading ? "讀取中…" : "檢查待同步 Issue"}</button>
+          </div>
+          {!!syncIssues.length && <div className="syncPreview">
+            {syncIssues.map((issue) => <div key={issue.number}><span>#{issue.number} · {issue.title}</span><small>{issue.workType}</small></div>)}
+            <button onClick={() => void confirmGithubSync()} disabled={syncLoading}>確認匯入 {syncIssues.length} 筆</button>
+          </div>}
+          {syncResult && <p className="syncResult">{syncResult}</p>}
         </section>
 
         <section className="workspace">

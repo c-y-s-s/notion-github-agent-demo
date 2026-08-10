@@ -106,3 +106,27 @@ export async function queryNotionTasks() {
   const data = (await response.json()) as { results?: NotionPage[] };
   return { configured: true as const, tasks: (data.results || []).map(normalizePage) };
 }
+
+export async function createNotionTaskFromGithubIssue(issue:{ title:string; url:string; repositoryUrl:string; workType:string }) {
+  const token = process.env.NOTION_TOKEN;
+  const dataSourceId = process.env.NOTION_DATA_SOURCE_ID;
+  if (!token || !dataSourceId) throw new Error("notion_not_configured");
+  const response = await fetch("https://api.notion.com/v1/pages", {
+    method:"POST",
+    headers:{ Authorization:`Bearer ${token}`, "Content-Type":"application/json", "Notion-Version":"2026-03-11" },
+    body:JSON.stringify({
+      parent:{ data_source_id:dataSourceId },
+      properties:{
+        [propertyNames.task]:{ title:[{ text:{ content:issue.title } }] },
+        [propertyNames.project]:{ select:{ name:process.env.NOTION_SYNC_PROJECT || "Notion GitHub Agent" } },
+        [propertyNames.status]:{ status:{ name:"未開始" } },
+        [process.env.NOTION_WORK_TYPE_PROPERTY || "Work Type"]:{ select:{ name:issue.workType } },
+        [propertyNames.repository]:{ url:issue.repositoryUrl },
+        [propertyNames.githubLinks]:{ rich_text:[{ text:{ content:issue.url, link:{ url:issue.url } } }] },
+      },
+    }),
+    cache:"no-store",
+  });
+  if (!response.ok) throw new Error(`Notion create ${response.status}: ${(await response.text()).slice(0, 240)}`);
+  return await response.json() as { id:string; url:string };
+}
