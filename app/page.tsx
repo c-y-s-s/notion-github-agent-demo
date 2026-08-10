@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 type Status = "未開始" | "執行中" | "已完成";
 type Tone = "neutral" | "review" | "success" | "risk";
@@ -14,6 +14,7 @@ type ApiTask = {
   githubErrors?:Array<{url:string;message:string}>;
   analysis:Analysis;
 };
+type ChatMessage = { role:"user"|"agent"; text:string; tools?:string[] };
 
 const filters = ["全部", "本週", "逾期", "無期限", "未開始", "執行中", "已完成"] as const;
 
@@ -33,6 +34,9 @@ export default function Home() {
   const [source, setSource] = useState<"notion" | "unconfigured" | "loading" | "error">("loading");
   const [syncedAt, setSyncedAt] = useState<string>("");
   const [weekLabel, setWeekLabel] = useState<string>("");
+  const [question, setQuestion] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   const loadTasks = useCallback(async () => {
     setSource("loading");
@@ -71,6 +75,23 @@ export default function Home() {
   const overdue = tasks.filter((task) => task.computedTags.includes("overdue"));
   const firstConflictEvidence = conflicts[0]?.evidences.find((item) => item.conflict);
   const connectionText = source === "notion" ? "Notion 與 GitHub 已連線" : source === "loading" ? "正在讀取真實資料…" : source === "error" ? "資料讀取失敗" : "尚未設定 Notion";
+
+  async function askAgent(event:FormEvent) {
+    event.preventDefault();
+    const value = question.trim();
+    if (!value || chatLoading) return;
+    setMessages((current) => [...current, { role:"user", text:value }]);
+    setQuestion("");
+    setChatLoading(true);
+    try {
+      const response = await fetch("/api/agent", { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ message:value }) });
+      const data = await response.json() as { answer?:string; tools_used?:string[]; error?:string };
+      if (!response.ok || !data.answer) throw new Error(data.error || "Agent failed");
+      setMessages((current) => [...current, { role:"agent", text:data.answer!, tools:data.tools_used || [] }]);
+    } catch (error) {
+      setMessages((current) => [...current, { role:"agent", text:`目前無法回答：${error instanceof Error ? error.message : "unknown_error"}` }]);
+    } finally { setChatLoading(false); }
+  }
 
   return (
     <main>
@@ -125,6 +146,30 @@ export default function Home() {
           <div className="agentIcon">A</div>
           <div><p className="eyebrow">規則建議</p><h2>{attention[0] ? `請確認「${attention[0].title}」` : "目前沒有需要人工確認的項目"}</h2><p>{attention[0]?.analysis.summary || "GitHub 證據只代表工程活動；PR 合併後仍需確認部署、QA 或驗收。"}</p></div>
           {(attention[0]?.evidences[0]?.url || firstConflictEvidence?.url) ? <a className="insightLink" href={attention[0]?.evidences[0]?.url || firstConflictEvidence?.url} target="_blank" rel="noreferrer">查看證據 →</a> : <span />}
+        </section>
+
+        <section className="agentPanel" aria-labelledby="agent-title">
+          <div className="agentHeader">
+            <div><p className="eyebrow">TRACEBOARD AGENT</p><h2 id="agent-title">直接詢問你的專案狀態</h2><p>Agent 會先讀取 Notion 與 GitHub 工具結果，再產生有來源的回答。</p></div>
+            <span className="readOnlyBadge">唯讀模式</span>
+          </div>
+          {!messages.length && <div className="suggestions">
+            {["我這週有哪些 Task？","哪些工作已經逾期？","哪些狀態需要人工確認？","幫我整理本週工作摘要"].map((item) => <button key={item} onClick={() => setQuestion(item)}>{item}</button>)}
+          </div>}
+          {!!messages.length && <div className="conversation" aria-live="polite">
+            {messages.map((message, index) => <div className={`message ${message.role}`} key={`${message.role}-${index}`}>
+              <strong>{message.role === "agent" ? "Agent" : "你"}</strong>
+              <p>{message.text}</p>
+              {!!message.tools?.length && <small>使用工具：{message.tools.join("、")}</small>}
+            </div>)}
+            {chatLoading && <div className="message agent"><strong>Agent</strong><p>正在查詢任務與證據…</p></div>}
+          </div>}
+          <form className="agentForm" onSubmit={askAgent}>
+            <label className="srOnly" htmlFor="agent-question">詢問 Agent</label>
+            <input id="agent-question" value={question} onChange={(event) => setQuestion(event.target.value)} maxLength={1000} placeholder="例如：這週有哪些工作可能延遲？" />
+            <button disabled={!question.trim() || chatLoading}>{chatLoading ? "查詢中" : "詢問 Agent"}</button>
+          </form>
+          <p className="agentNote">任務內容會傳送至 OpenAI API 以產生回答；Token 不會送入模型。</p>
         </section>
       </section>
     </main>
