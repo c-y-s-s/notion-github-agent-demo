@@ -93,5 +93,8 @@ export async function pushLocalFix(runData:{title:string;issueNumber:number|null
   });
   const data = await response.json() as { html_url?:string; message?:string };
   if (!response.ok || !data.html_url) throw new Error(data.message || `GitHub PR HTTP ${response.status}`);
-  return { branch:runData.branch, pullRequestUrl:data.html_url };
+  const result = { branch:runData.branch, pullRequestUrl:data.html_url };
+  await run("git", ["worktree", "remove", "--force", runData.worktree], repoRoot, 60_000);
+  await run("git", ["branch", "-D", runData.branch], repoRoot, 30_000);
+  return result;
 }
