@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { cleanupLocalFix, prepareLocalFix, pushLocalFix } from "../lib/local-fix-runner";
 
-type StoredRun = { taskId:string; title:string; issueNumber:number|null; branch:string; worktree:string; changedFiles:string[]; expiresAt:number; status:"ready"|"pushing" };
+type StoredRun = { runId:string; taskId:string; title:string; issueNumber:number|null; branch:string; worktree:string; changedFiles:string[]; expiresAt:number; status:"ready"|"pushing" };
 const runs = new Map<string, StoredRun>();
 const preparingTasks = new Set<string>();
 
@@ -33,7 +33,8 @@ createServer(async (request, response) => {
     const input = await body(request);
     if (request.url === "/prepare") {
       const taskId = String(input.taskId || "");
-      if (!taskId || preparingTasks.has(taskId) || [...runs.values()].some((run) => run.taskId === taskId)) return json(response, 409, { error:"fix_already_in_progress" });
+      const runId = String(input.runId || "");
+      if (!runId || !taskId || preparingTasks.has(taskId) || [...runs.values()].some((run) => run.taskId === taskId)) return json(response, 409, { error:"fix_already_in_progress", runId });
       preparingTasks.add(taskId);
       try {
         const prepared = await prepareLocalFix({
@@ -45,8 +46,8 @@ createServer(async (request, response) => {
           validationSteps:Array.isArray(input.validationSteps) ? input.validationSteps.map(String) : [],
         });
         const pushToken = crypto.randomUUID();
-        runs.set(pushToken, { taskId, title:String(input.title), issueNumber:typeof input.issueNumber === "number" ? input.issueNumber : null, branch:prepared.branch, worktree:prepared.worktree, changedFiles:prepared.changedFiles, expiresAt:Date.now() + 30 * 60_000, status:"ready" });
-        return json(response, 200, { branch:prepared.branch, changedFiles:prepared.changedFiles, diff:prepared.diff, testSummary:prepared.testSummary, pushToken });
+        runs.set(pushToken, { runId, taskId, title:String(input.title), issueNumber:typeof input.issueNumber === "number" ? input.issueNumber : null, branch:prepared.branch, worktree:prepared.worktree, changedFiles:prepared.changedFiles, expiresAt:Date.now() + 30 * 60_000, status:"ready" });
+        return json(response, 200, { runId, branch:prepared.branch, changedFiles:prepared.changedFiles, changedLines:prepared.changedLines, durationMs:prepared.durationMs, diff:prepared.diff, testSummary:prepared.testSummary, pushToken });
       } finally { preparingTasks.delete(taskId); }
     }
     if (request.url === "/push") {
@@ -58,10 +59,10 @@ createServer(async (request, response) => {
       try {
         const result = await pushLocalFix(run);
         runs.delete(pushToken);
-        return json(response, 200, result);
+        return json(response, 200, { ...result, runId:run.runId });
       } catch (error) {
         run.status = "ready";
-        throw error;
+        return json(response, 502, { runId:run.runId, taskTitle:run.title, issueNumber:run.issueNumber, error:error instanceof Error ? error.message : "push_failed" });
       }
     }
     return json(response, 404, { error:"not_found" });
