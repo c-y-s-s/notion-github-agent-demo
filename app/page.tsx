@@ -9,7 +9,7 @@ type ComputedTag = "due_this_week" | "completed_this_week" | "overdue" | "no_due
 type Evidence = { label: string; detail: string; tone: Tone; url?: string; conflict: boolean };
 type Analysis = { code:string; severity:"none"|"info"|"warning"|"conflict"; summary:string; suggestedStatus:Status|null; confidence:number; ruleVersion:string };
 type WorkType = "Feature"|"Bug"|"Chore"|"Docs"|"Research"|"未分類";
-type Task = { id:string; title: string; project: string; workType:WorkType; status: Status; due: string; notionUrl:string; computedTags:ComputedTag[]; evidences: Evidence[]; analysis:Analysis; conflict: boolean };
+type Task = { id:string; title: string; project: string; workType:WorkType; status: Status; due: string; notionUrl:string; githubLinks:string[]; computedTags:ComputedTag[]; evidences: Evidence[]; analysis:Analysis; conflict: boolean };
 type ApiTask = {
   id:string; title:string; project:string; workType:WorkType; status:Status; due:string; notionUrl:string; githubLinks:string[]; computedTags:ComputedTag[];
   githubEvidence?:Array<{label:string;detail:string;tone:Tone;url:string;conflict:boolean}>;
@@ -35,6 +35,11 @@ function normalizeTask(task: ApiTask): Task {
   const evidences = [...validEvidence, ...errors];
   if (!evidences.length) evidences.push({ label: "尚未連結", detail: "等待 Issue 或 PR", tone: "neutral", conflict: false });
   return { ...task, evidences, conflict: task.analysis.severity === "conflict" };
+}
+
+function githubReference(link:string) {
+  const match = link.match(/github\.com\/[^/]+\/[^/]+\/(issues|pull)\/(\d+)/);
+  return match ? `${match[1] === "issues" ? "Issue" : "PR"} #${match[2]}` : "GitHub";
 }
 
 export default function Home() {
@@ -211,9 +216,11 @@ export default function Home() {
     setFixLoading(true); setFixError("");
     try {
       const response = await fetch("/api/tasks/fix/push", { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ taskId:selectedTask.id, pushToken:fixPreview.pushToken }) });
-      const data = await response.json() as { pullRequestUrl?:string; error?:string };
+      const data = await response.json() as { pullRequestUrl?:string; error?:string; warning?:string };
       if (!response.ok || !data.pullRequestUrl) throw new Error(data.error || "Push failed");
       setPullRequestUrl(data.pullRequestUrl);
+      if (data.warning) setFixError(data.warning);
+      await loadTasks();
     } catch (error) { setFixError(error instanceof Error ? error.message : "unknown_error"); }
     finally { setFixLoading(false); }
   }
@@ -275,8 +282,8 @@ export default function Home() {
             {source === "unconfigured" && <div className="dataState">尚未設定 Notion，請先完成本機環境變數。</div>}
             {source === "notion" && !visibleTasks.length && <div className="dataState">沒有符合目前篩選條件的 Task。</div>}
             {visibleTasks.map((task) => (
-              <article className="tableRow" key={task.title}>
-                <div className="taskName"><button onClick={() => void analyzeTask(task)}><strong>{task.title}</strong><span className={`workType type-${task.workType}`}>{task.workType}</span><small>{task.project}</small></button></div>
+              <article className="tableRow" key={task.id}>
+                <div className="taskName"><button onClick={() => void analyzeTask(task)}><strong>{task.title}</strong><span className={`workType type-${task.workType}`}>{task.workType}</span><small>{task.project}{task.githubLinks.length ? ` · ${task.githubLinks.map(githubReference).join(" → ")}` : ""}</small></button></div>
                 <div><span className={`status status-${task.status}`}>{task.status}</span></div>
                 <span>{task.due}</span>
                 <div className="githubEvidenceList">

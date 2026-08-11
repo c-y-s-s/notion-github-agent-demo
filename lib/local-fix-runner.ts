@@ -96,6 +96,7 @@ export async function pushLocalFix(runData:{title:string;issueNumber:number|null
   const repository = process.env.GITHUB_SYNC_REPOSITORY || "c-y-s-s/notion-github-agent-demo";
   const token = process.env.GITHUB_TOKEN;
   if (!token) throw new Error("github_token_missing_for_pr");
+  const cleanTitle = runData.title.replace(/^\[#\d+\]\s*/, "");
   const body = `${runData.issueNumber ? `Closes #${runData.issueNumber}\n\n` : ""}由 Traceboard 小型修正流程產生。已通過 lint、test 與 build；請人工 Review 後再合併。`;
   const requestHeaders = { Authorization:`Bearer ${token}`, Accept:"application/vnd.github+json", "Content-Type":"application/json", "X-GitHub-Api-Version":"2026-03-10", "User-Agent":"traceboard-local-demo" };
   const [owner] = repository.split("/");
@@ -104,7 +105,7 @@ export async function pushLocalFix(runData:{title:string;issueNumber:number|null
   const response = existing[0]?.html_url ? null : await fetch(`https://api.github.com/repos/${repository}/pulls`, {
     method:"POST",
     headers:requestHeaders,
-    body:JSON.stringify({ title:`fix: ${runData.title}`, head:runData.branch, base:baseRef, body, draft:true }),
+    body:JSON.stringify({ title:runData.issueNumber ? `fix(#${runData.issueNumber}): ${cleanTitle}` : `fix: ${cleanTitle}`, head:runData.branch, base:baseRef, body, draft:true }),
   });
   const data = existing[0]?.html_url ? existing[0] : await response!.json() as { html_url?:string; message?:string };
   if ((!existing[0]?.html_url && !response!.ok) || !data.html_url) throw new Error(("message" in data && data.message) || `GitHub PR HTTP ${response?.status}`);
