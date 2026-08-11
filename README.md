@@ -11,6 +11,7 @@
 - 規則式建議狀態、信心程度與版本化判斷
 - OpenAI Agent 對話與每日摘要
 - Slack 每日摘要手動發送
+- GitHub Issue 匯入 Notion，並由 Issue timeline 自動發現關聯 PR
 
 ## 本機執行
 

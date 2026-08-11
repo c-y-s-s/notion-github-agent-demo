@@ -26,7 +26,7 @@ export const agentTools = definitions.map(([name, description, hasScope]) => ({
 
 function publicTask(task: Dataset["tasks"][number]) {
   return {
-    title:task.title, project:task.project, status:task.status, due:task.dueRaw,
+    title:task.title, project:task.project, work_type:task.workType, status:task.status, due:task.dueRaw,
     completed_at:task.completedAt, tags:task.computedTags, analysis:task.analysis,
     notion_url:task.notionUrl,
     github_evidence:task.githubEvidence.map((item) => ({ label:item.label, detail:item.detail, phase:item.phase, url:item.url })),
