@@ -67,7 +67,19 @@ npm run dev
 ```bash
 npm run lint
 npm test
+npm run benchmark:baseline
 ```
+
+真實 Agent benchmark 必須明確指定案例，避免不小心觸發付費模型呼叫：
+
+```bash
+npm run benchmark -- --case B01
+npm run benchmark -- --all
+```
+
+案例定義位於 `benchmarks/cases.json`；Agent 看得到 Issue 與待修檔案，但看不到 `hidden-evaluator.ts`。結果寫入未納入版控的 `.benchmark-results/latest.json`。
+
+首輪單次執行結果為 7/10（70%）修復成功、30% 需要人工介入，平均 41.4 秒。人工檢查發現三個失敗都涉及未寫清楚的驗收條件；修訂規格後 selective rerun 為 3/3。這不能改寫成「整體成功率 100%」，完整分析見 [`docs/EVALUATION.md`](docs/EVALUATION.md)。
 
 ## 安全邊界
 

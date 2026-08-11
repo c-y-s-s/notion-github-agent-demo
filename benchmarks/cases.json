@@ -1,0 +1,12 @@
+[
+  {"id":"B01","category":"normalization","title":"Username normalization keeps mixed case","issue":"normalizeUsername should trim whitespace and return a lowercase username.","file":"B01.js"},
+  {"id":"B02","category":"boundary","title":"Pagination drops the last item","issue":"paginate should include every item and must not create an empty trailing page.","file":"B02.js"},
+  {"id":"B03","category":"precision","title":"Money total has floating-point drift","issue":"sumAmounts should add the input amounts, then round the final aggregate to two decimal places. Do not round each input separately.","file":"B03.js"},
+  {"id":"B04","category":"parsing","title":"String false is treated as enabled","issue":"parseBoolean should accept booleans, numeric 1/0, and common true/false strings while ignoring letter case and surrounding whitespace. It should reject unknown values.","file":"B04.js"},
+  {"id":"B05","category":"collection","title":"Deduplication keeps the wrong record","issue":"uniqueById should keep the first record for each id without changing input order.","file":"B05.js"},
+  {"id":"B06","category":"control-flow","title":"Retry waits after the final failure","issue":"retryDelays should return delays only between attempts, never after the final attempt.","file":"B06.js"},
+  {"id":"B07","category":"security","title":"Token redaction leaks repeated tokens","issue":"redactTokens must redact every bearer token regardless of letter case.","file":"B07.js"},
+  {"id":"B08","category":"boundary","title":"Payload limit rejects exact boundary","issue":"isWithinLimit should accept payloads whose size equals the configured limit.","file":"B08.js"},
+  {"id":"B09","category":"immutability","title":"Task sorting mutates caller data","issue":"sortByPriority should return sorted tasks without mutating the input array.","file":"B09.js"},
+  {"id":"B10","category":"date-time","title":"Date-only comparison depends on local time","issue":"isSameUtcDay should compare calendar dates in UTC, including offset timestamps.","file":"B10.js"}
+]

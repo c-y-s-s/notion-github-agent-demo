@@ -1,0 +1,23 @@
+{
+  "kind": "published-summary",
+  "generatedAt": "2026-08-11T15:33:05.089Z",
+  "environment": {
+    "codexCli": "0.147.0-alpha.6.5",
+    "node": "23.5.0",
+    "sourceCommit": "6869076",
+    "runsPerCase": 1
+  },
+  "metrics": {
+    "total": 10,
+    "repaired": 7,
+    "repairSuccessRate": 0.7,
+    "humanInterventionRate": 0.3,
+    "averageDurationMs": 41365
+  },
+  "failedCases": ["B03", "B04", "B07"],
+  "review": {
+    "classification": "spec_ambiguity",
+    "finding": "All three candidates implemented plausible fixes. B03 and B04 contained unstated acceptance requirements; B07's evaluator checked presentation instead of token leakage. The benchmark was revised before the next run."
+  },
+  "warning": "This is an initial single-run baseline, not a statistically stable model comparison."
+}

@@ -1,0 +1,13 @@
+{
+  "kind": "published-summary",
+  "generatedAt": "2026-08-11",
+  "change": "Clarified B03 and B04 acceptance criteria and changed B07 to semantic security validation.",
+  "retestedCases": ["B03", "B04", "B07"],
+  "metrics": {
+    "total": 3,
+    "repaired": 3,
+    "repairSuccessRate": 1,
+    "humanInterventionRate": 0
+  },
+  "warning": "This selective rerun diagnoses specification quality. It must not be reported as a new 10-case success rate."
+}
