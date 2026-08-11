@@ -56,6 +56,7 @@ Issue #21 和 PR #23 是不同 GitHub 物件，Notion 標題也可能被修改�
 ```bash
 npm run lint
 npm test
+npm run benchmark:baseline
 ```
 
 - 準備一個只需修改 1–2 個檔案、有明確重現步驟的 Bug Issue。

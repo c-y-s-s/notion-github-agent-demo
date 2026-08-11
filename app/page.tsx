@@ -28,6 +28,10 @@ type Evaluation = {
   metrics:{total:number;testsPassRate:number;pullRequestRate:number;humanAcceptanceRate:number;averageDurationMs:number;failureCount:number};
   runs:Array<{id:string;taskTitle:string;issueNumber:number|null;status:string;changedFiles:number;changedLines:number;durationMs:number;pullRequestUrl:string|null;errorCode:string|null;createdAt:string}>;
   benchmark:{total:number;passed:number;passRate:number;results:Array<{id:string;description:string;passed:boolean}>};
+  repairBenchmark:{
+    initial:{generatedAt:string;metrics:{total:number;repaired:number;repairSuccessRate:number;humanInterventionRate:number;averageDurationMs:number};failedCases:string[]};
+    specificationRevision:{metrics:{total:number;repaired:number;repairSuccessRate:number;humanInterventionRate:number}};
+  };
 };
 
 const filters = ["全部", "本週", "逾期", "無期限", "未開始", "執行中", "已完成"] as const;
@@ -326,15 +330,24 @@ export default function Home() {
           <div className="evaluationHead"><div><h2 id="evaluation-title">Agent 評測</h2><p>只記錄結構化執行結果，不保存 Token、完整 Prompt 或 Diff。</p></div><button onClick={() => void loadEvaluation()} disabled={evaluationLoading}>{evaluationLoading ? "讀取中…" : "重新整理"}</button></div>
           {evaluationError && <p className="fixError">評測資料無法讀取：{evaluationError}</p>}
           {evaluation && <>
+            <h3 className="evaluationSectionTitle">Bug 修復 Benchmark</h3>
             <div className="evaluationMetrics">
+              <article><span>案例</span><strong>{evaluation.repairBenchmark.initial.metrics.total}</strong></article>
+              <article><span>首輪修復成功</span><strong>{Math.round(evaluation.repairBenchmark.initial.metrics.repairSuccessRate * 100)}%</strong></article>
+              <article><span>人工介入</span><strong>{Math.round(evaluation.repairBenchmark.initial.metrics.humanInterventionRate * 100)}%</strong></article>
+              <article><span>平均耗時</span><strong>{Math.round(evaluation.repairBenchmark.initial.metrics.averageDurationMs / 1000)}s</strong></article>
+            </div>
+            <p className="evaluationCaveat">首輪 7/10；失敗案例 {evaluation.repairBenchmark.initial.failedCases.join("、")} 經人工審查為規格歧義。修訂後只重跑這 3 題並全數通過，不能視為完整 100% 重跑。</p>
+            <div className="benchmarkSummary">
+              <div><strong>狀態判斷基準測試</strong><small>固定案例，可重現驗證 Agent 前置規則</small></div>
+              <b className={evaluation.benchmark.passRate === 1 ? "benchmarkPass" : "benchmarkFail"}>{evaluation.benchmark.passed}/{evaluation.benchmark.total} 通過</b>
+            </div>
+            <h3 className="evaluationSectionTitle">實際工作流程 Runs</h3>
+            <div className="evaluationMetrics liveRunMetrics">
               <article><span>Runs</span><strong>{evaluation.metrics.total}</strong></article>
               <article><span>測試通過</span><strong>{Math.round(evaluation.metrics.testsPassRate * 100)}%</strong></article>
               <article><span>產生 PR</span><strong>{Math.round(evaluation.metrics.pullRequestRate * 100)}%</strong></article>
               <article><span>平均耗時</span><strong>{Math.round(evaluation.metrics.averageDurationMs / 1000)}s</strong></article>
-            </div>
-            <div className="benchmarkSummary">
-              <div><strong>狀態判斷基準測試</strong><small>固定案例，可重現驗證 Agent 前置規則</small></div>
-              <b className={evaluation.benchmark.passRate === 1 ? "benchmarkPass" : "benchmarkFail"}>{evaluation.benchmark.passed}/{evaluation.benchmark.total} 通過</b>
             </div>
             <div className="evaluationRuns">
               {!evaluation.runs.length && <p>尚無 Agent Run。完成一次小型修正後會開始累積資料。</p>}
