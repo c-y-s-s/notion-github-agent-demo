@@ -9,7 +9,7 @@ type ComputedTag = "due_this_week" | "completed_this_week" | "overdue" | "no_due
 type Evidence = { label: string; detail: string; tone: Tone; url?: string; conflict: boolean };
 type Analysis = { code:string; severity:"none"|"info"|"warning"|"conflict"; summary:string; suggestedStatus:Status|null; confidence:number; ruleVersion:string };
 type WorkType = "Feature"|"Bug"|"Chore"|"Docs"|"Research"|"未分類";
-type Task = { id:string; title: string; project: string; workType:WorkType; status: Status; due: string; notionUrl:string; computedTags:ComputedTag[]; evidences: Evidence[]; analysis:Analysis; conflict: boolean };
+type Task = { id:string; title: string; project: string; workType:WorkType; status: Status; due: string; notionUrl:string; githubLinks:string[]; computedTags:ComputedTag[]; evidences: Evidence[]; analysis:Analysis; conflict: boolean };
 type ApiTask = {
   id:string; title:string; project:string; workType:WorkType; status:Status; due:string; notionUrl:string; githubLinks:string[]; computedTags:ComputedTag[];
   githubEvidence?:Array<{label:string;detail:string;tone:Tone;url:string;conflict:boolean}>;
@@ -20,6 +20,7 @@ type ChatMessage = { role:"user"|"agent"; text:string; tools?:string[] };
 type SyncIssue = { number:number; title:string; url:string; workType:string };
 type TaskAgentAnalysis = { summary:string; likely_cause:string; proposed_changes:string[]; validation_steps:string[]; risk_level:"low"|"medium"|"high"; eligible_for_small_fix:boolean; eligibility_reason:string; blocked_by:string[]; inspected_files:string[] };
 type FixPreview = { branch:string; changedFiles:string[]; diff:string; testSummary:string; pushToken:string };
+type ActiveTool = "brief"|"sync"|"agent"|null;
 
 const filters = ["全部", "本週", "逾期", "無期限", "未開始", "執行中", "已完成"] as const;
 
@@ -35,6 +36,11 @@ function normalizeTask(task: ApiTask): Task {
   const evidences = [...validEvidence, ...errors];
   if (!evidences.length) evidences.push({ label: "尚未連結", detail: "等待 Issue 或 PR", tone: "neutral", conflict: false });
   return { ...task, evidences, conflict: task.analysis.severity === "conflict" };
+}
+
+function githubReference(link:string) {
+  const match = link.match(/github\.com\/[^/]+\/[^/]+\/(issues|pull)\/(\d+)/);
+  return match ? `${match[1] === "issues" ? "Issue" : "PR"} #${match[2]}` : "GitHub";
 }
 
 export default function Home() {
@@ -63,6 +69,7 @@ export default function Home() {
   const [fixLoading, setFixLoading] = useState(false);
   const [fixError, setFixError] = useState("");
   const [pullRequestUrl, setPullRequestUrl] = useState("");
+  const [activeTool, setActiveTool] = useState<ActiveTool>(null);
 
   const loadTasks = useCallback(async () => {
     setSource("loading");
@@ -211,9 +218,11 @@ export default function Home() {
     setFixLoading(true); setFixError("");
     try {
       const response = await fetch("/api/tasks/fix/push", { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ taskId:selectedTask.id, pushToken:fixPreview.pushToken }) });
-      const data = await response.json() as { pullRequestUrl?:string; error?:string };
+      const data = await response.json() as { pullRequestUrl?:string; error?:string; warning?:string };
       if (!response.ok || !data.pullRequestUrl) throw new Error(data.error || "Push failed");
       setPullRequestUrl(data.pullRequestUrl);
+      if (data.warning) setFixError(data.warning);
+      await loadTasks();
     } catch (error) { setFixError(error instanceof Error ? error.message : "unknown_error"); }
     finally { setFixLoading(false); }
   }
@@ -228,7 +237,12 @@ export default function Home() {
       <section className="shell" id="top">
         <div className="pageHeader">
           <div><h1>工作進度</h1><p>{weekLabel ? `本週 · ${weekLabel}` : "正在取得本週範圍"}</p></div>
-          <button className="primary" onClick={() => void loadTasks()} disabled={source === "loading"}>{source === "loading" ? "同步中…" : "重新同步"}</button>
+          <div className="pageActions">
+            <button className={activeTool === "brief" ? "active" : ""} onClick={() => setActiveTool(activeTool === "brief" ? null : "brief")}>今日摘要</button>
+            <button className={activeTool === "sync" ? "active" : ""} onClick={() => setActiveTool(activeTool === "sync" ? null : "sync")}>匯入 Issue</button>
+            <button className={activeTool === "agent" ? "active" : ""} onClick={() => setActiveTool(activeTool === "agent" ? null : "agent")}>詢問 Agent</button>
+            <button className="refreshButton" aria-label="重新同步資料" onClick={() => void loadTasks()} disabled={source === "loading"}>{source === "loading" ? "同步中…" : "重新整理"}</button>
+          </div>
         </div>
 
         <section className="summaryBar" aria-label="本週統計">
@@ -238,7 +252,7 @@ export default function Home() {
           <article className="riskMetric"><span>需要確認</span><strong>{source === "loading" ? "—" : attention.length}</strong><small className="red">建議或狀態矛盾</small></article>
         </section>
 
-        <section className="dailyBrief" aria-labelledby="daily-brief-title">
+        {activeTool === "brief" && <section className="dailyBrief toolPanel" aria-labelledby="daily-brief-title">
           <div className="dailyBriefHead">
             <div><h2 id="daily-brief-title">每日工作摘要</h2><p>依逾期、今天到期與狀態矛盾整理，不會修改 Notion。</p></div>
             <div className="dailyActions">
@@ -248,9 +262,9 @@ export default function Home() {
           </div>
           {slackResult && <p className={`slackResult ${slackResult.startsWith("已") ? "success" : "error"}`}>{slackResult}</p>}
           {dailySummary ? <div className="dailyBriefContent"><AgentMarkdown>{dailySummary}</AgentMarkdown></div> : <p className="dailyBriefEmpty">產生後會顯示今日概況，以及最多三項需要優先處理的工作。</p>}
-        </section>
+        </section>}
 
-        <section className="syncPanel" aria-labelledby="sync-title">
+        {activeTool === "sync" && <section className="syncPanel toolPanel" aria-labelledby="sync-title">
           <div className="syncHead">
             <div><h2 id="sync-title">GitHub Issues → Notion</h2><p>只建立 Notion 尚未收錄的開啟中 Issue，不覆蓋既有 Task。</p></div>
             <button onClick={() => void previewGithubSync()} disabled={syncLoading}>{syncLoading ? "讀取中…" : "檢查待同步 Issue"}</button>
@@ -260,37 +274,54 @@ export default function Home() {
             <button onClick={() => void confirmGithubSync()} disabled={syncLoading}>確認匯入 {syncIssues.length} 筆</button>
           </div>}
           {syncResult && <p className="syncResult">{syncResult}</p>}
-        </section>
+        </section>}
+
+        {activeTool === "agent" && <section className="agentPanel toolPanel" aria-labelledby="agent-title">
+          <div className="agentHeader">
+            <div><h2 id="agent-title">詢問 Agent</h2><p>查詢 Notion 與 GitHub 的工作狀態。</p></div>
+            <span className="readOnlyBadge">唯讀</span>
+          </div>
+          {!messages.length && <div className="suggestions">
+            {["我這週有哪些 Task？","哪些工作已經逾期？","哪些狀態需要人工確認？"].map((item) => <button key={item} onClick={() => setQuestion(item)}>{item}</button>)}
+          </div>}
+          {!!messages.length && <div className="conversation" aria-live="polite">
+            {messages.map((message, index) => <div className={`message ${message.role}`} key={`${message.role}-${index}`}>
+              <strong>{message.role === "agent" ? "Agent" : "你"}</strong><AgentMarkdown>{message.text}</AgentMarkdown>
+            </div>)}
+            {chatLoading && <div className="message agent"><strong>Agent</strong><p>正在查詢…</p></div>}
+          </div>}
+          <form className="agentForm" onSubmit={askAgent}>
+            <label className="srOnly" htmlFor="agent-question">詢問 Agent</label>
+            <input id="agent-question" value={question} onChange={(event) => setQuestion(event.target.value)} maxLength={1000} placeholder="詢問目前工作狀態…" />
+            <button disabled={!question.trim() || chatLoading}>{chatLoading ? "查詢中" : "送出"}</button>
+          </form>
+        </section>}
 
         <section className="workspace">
           <div className="sectionHead">
-            <div><h2>任務證據</h2><p>{syncedAt ? `最後同步：今天 ${syncedAt}` : "尚未完成同步"}</p></div>
+            <div><h2>任務</h2><p>{syncedAt ? `${visibleTasks.length} 筆 · 更新於 ${syncedAt}` : "尚未完成同步"}</p></div>
             <div className="filters" aria-label="任務狀態篩選">{filters.map((item) => <button key={item} className={filter === item ? "active" : ""} onClick={() => setFilter(item)}>{item}</button>)}</div>
           </div>
 
           <div className="taskTable">
-            <div className="tableRow tableHeader"><span>任務</span><span>狀態</span><span>到期日</span><span>GitHub 證據</span></div>
+            <div className="tableRow tableHeader"><span>任務</span><span>狀態</span><span>到期日</span><span>工程狀態</span></div>
             {source === "loading" && <div className="dataState">正在同步 Notion 與 GitHub，畫面不會顯示假資料。</div>}
             {source === "error" && <div className="dataState errorState">讀取失敗。請檢查連線後重新同步。</div>}
             {source === "unconfigured" && <div className="dataState">尚未設定 Notion，請先完成本機環境變數。</div>}
             {source === "notion" && !visibleTasks.length && <div className="dataState">沒有符合目前篩選條件的 Task。</div>}
             {visibleTasks.map((task) => (
-              <article className="tableRow" key={task.title}>
-                <div className="taskName"><button onClick={() => void analyzeTask(task)}><strong>{task.title}</strong><span className={`workType type-${task.workType}`}>{task.workType}</span><small>{task.project}</small></button></div>
+              <article className="tableRow" key={task.id}>
+                <div className="taskName"><button onClick={() => void analyzeTask(task)}><strong>{task.title}</strong><span className={`workType type-${task.workType}`}>{task.workType}</span><small>{task.project}{task.githubLinks.length ? ` · ${task.githubLinks.map(githubReference).join(" → ")}` : ""}</small></button></div>
                 <div><span className={`status status-${task.status}`}>{task.status}</span></div>
                 <span>{task.due}</span>
                 <div className="githubEvidenceList">
-                  {task.evidences.map((item, index) => (
-                    <div className="githubEvidence" key={`${item.url || item.label}-${index}`}>
+                  {task.evidences.slice(-1).map((item) => (
+                    <div className="githubEvidence" key={item.url || item.label}>
                       <strong>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">{item.label} ↗</a> : item.label}</strong>
                       <small className={item.tone}>{item.detail}</small>
                     </div>
                   ))}
-                  <div className={`analysisResult analysis-${task.analysis.severity}`}>
-                    <span>{task.analysis.suggestedStatus ? `建議 ${task.analysis.suggestedStatus}` : task.analysis.code === "consistent" ? "狀態一致" : "證據不足"}</span>
-                    <strong>{Math.round(task.analysis.confidence * 100)}%</strong>
-                    <small>{task.analysis.summary}</small>
-                  </div>
+                  {task.analysis.severity !== "none" && <span className={`evidenceFlag evidenceFlag-${task.analysis.severity}`}>{task.analysis.suggestedStatus ? `建議改為${task.analysis.suggestedStatus}` : task.analysis.severity === "conflict" ? "需要確認" : "證據不足"}</span>}
                 </div>
               </article>
             ))}
@@ -318,34 +349,10 @@ export default function Home() {
           </aside>
         </div>}
 
-        <section className="ruleNotice">
+        {!!attention.length && <section className="ruleNotice">
           <div><strong>需要確認</strong><h2>{attention[0] ? `「${attention[0].title}」` : "目前沒有需要人工確認的項目"}</h2><p>{attention[0]?.analysis.summary || "GitHub 證據只代表工程活動；PR 合併後仍需確認部署、QA 或驗收。"}</p></div>
           {(attention[0]?.evidences[0]?.url || firstConflictEvidence?.url) ? <a href={attention[0]?.evidences[0]?.url || firstConflictEvidence?.url} target="_blank" rel="noreferrer">查看證據 →</a> : <span />}
-        </section>
-
-        <section className="agentPanel" aria-labelledby="agent-title">
-          <div className="agentHeader">
-            <div><h2 id="agent-title">詢問 Agent</h2><p>從 Notion 與 GitHub 查詢任務、逾期項目與狀態矛盾。</p></div>
-            <span className="readOnlyBadge">唯讀模式</span>
-          </div>
-          {!messages.length && <div className="suggestions">
-            {["我這週有哪些 Task？","哪些工作已經逾期？","哪些狀態需要人工確認？","幫我整理本週工作摘要"].map((item) => <button key={item} onClick={() => setQuestion(item)}>{item}</button>)}
-          </div>}
-          {!!messages.length && <div className="conversation" aria-live="polite">
-            {messages.map((message, index) => <div className={`message ${message.role}`} key={`${message.role}-${index}`}>
-              <strong>{message.role === "agent" ? "Agent" : "你"}</strong>
-              <AgentMarkdown>{message.text}</AgentMarkdown>
-              {!!message.tools?.length && <small>使用工具：{message.tools.join("、")}</small>}
-            </div>)}
-            {chatLoading && <div className="message agent"><strong>Agent</strong><p>正在查詢任務與證據…</p></div>}
-          </div>}
-          <form className="agentForm" onSubmit={askAgent}>
-            <label className="srOnly" htmlFor="agent-question">詢問 Agent</label>
-            <input id="agent-question" value={question} onChange={(event) => setQuestion(event.target.value)} maxLength={1000} placeholder="例如：這週有哪些工作可能延遲？" />
-            <button disabled={!question.trim() || chatLoading}>{chatLoading ? "查詢中" : "詢問 Agent"}</button>
-          </form>
-          <p className="agentNote">任務內容會傳送至 OpenAI API 以產生回答；Token 不會送入模型。</p>
-        </section>
+        </section>}
       </section>
     </main>
   );

@@ -114,17 +114,21 @@ export async function queryNotionTasks() {
   return { configured: true as const, tasks: (data.results || []).map(normalizePage) };
 }
 
-export async function createNotionTaskFromGithubIssue(issue:{ title:string; url:string; repositoryUrl:string; workType:string }) {
+function notionHeaders(token:string) {
+  return { Authorization:`Bearer ${token}`, "Content-Type":"application/json", "Notion-Version":"2026-03-11" };
+}
+
+export async function createNotionTaskFromGithubIssue(issue:{ number:number; title:string; url:string; repositoryUrl:string; workType:string }) {
   const token = process.env.NOTION_TOKEN;
   const dataSourceId = process.env.NOTION_DATA_SOURCE_ID;
   if (!token || !dataSourceId) throw new Error("notion_not_configured");
   const response = await fetch("https://api.notion.com/v1/pages", {
     method:"POST",
-    headers:{ Authorization:`Bearer ${token}`, "Content-Type":"application/json", "Notion-Version":"2026-03-11" },
+    headers:notionHeaders(token),
     body:JSON.stringify({
       parent:{ data_source_id:dataSourceId },
       properties:{
-        [propertyNames.task]:{ title:[{ text:{ content:issue.title } }] },
+        [propertyNames.task]:{ title:[{ text:{ content:`[#${issue.number}] ${issue.title}` } }] },
         [propertyNames.project]:{ select:{ name:process.env.NOTION_SYNC_PROJECT || "Notion GitHub Agent" } },
         [propertyNames.status]:{ status:{ name:"未開始" } },
         [propertyNames.workType]:{ select:{ name:issue.workType } },
@@ -136,4 +140,31 @@ export async function createNotionTaskFromGithubIssue(issue:{ title:string; url:
   });
   if (!response.ok) throw new Error(`Notion create ${response.status}: ${(await response.text()).slice(0, 240)}`);
   return await response.json() as { id:string; url:string };
+}
+
+export async function alignNotionTaskWithGithubIssue(taskId:string, issue:{number:number;title:string;url:string}) {
+  const token = process.env.NOTION_TOKEN;
+  if (!token) throw new Error("notion_not_configured");
+  const response = await fetch(`https://api.notion.com/v1/pages/${taskId}`, {
+    method:"PATCH", headers:notionHeaders(token), cache:"no-store",
+    body:JSON.stringify({ properties:{
+      [propertyNames.task]:{ title:[{ text:{ content:`[#${issue.number}] ${issue.title}` } }] },
+      [propertyNames.githubLinks]:{ rich_text:[{ text:{ content:issue.url, link:{ url:issue.url } } }] },
+    } }),
+  });
+  if (!response.ok) throw new Error(`Notion align ${response.status}: ${(await response.text()).slice(0, 240)}`);
+}
+
+export async function appendGithubLinkToNotionTask(taskId:string, url:string) {
+  const token = process.env.NOTION_TOKEN;
+  if (!token) throw new Error("notion_not_configured");
+  const pageResponse = await fetch(`https://api.notion.com/v1/pages/${taskId}`, { headers:notionHeaders(token), cache:"no-store" });
+  if (!pageResponse.ok) throw new Error(`Notion page ${pageResponse.status}: ${(await pageResponse.text()).slice(0, 240)}`);
+  const page = await pageResponse.json() as NotionPage;
+  const links = [...new Set([...extractUrls(page.properties[propertyNames.githubLinks]), url])];
+  const response = await fetch(`https://api.notion.com/v1/pages/${taskId}`, {
+    method:"PATCH", headers:notionHeaders(token), cache:"no-store",
+    body:JSON.stringify({ properties:{ [propertyNames.githubLinks]:{ rich_text:links.map((link, index) => ({ text:{ content:`${index ? "\n" : ""}${link}`, link:{ url:link } } })) } } }),
+  });
+  if (!response.ok) throw new Error(`Notion link ${response.status}: ${(await response.text()).slice(0, 240)}`);
 }

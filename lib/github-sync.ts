@@ -1,4 +1,5 @@
-import { createNotionTaskFromGithubIssue, queryNotionTasks } from "./notion";
+import { alignNotionTaskWithGithubIssue, appendGithubLinkToNotionTask, createNotionTaskFromGithubIssue, queryNotionTasks } from "./notion";
+import { getGithubEvidenceSet } from "./github";
 
 export type GithubIssueCandidate = { number:number; title:string; url:string; repositoryUrl:string; workType:string; labels:string[] };
 
@@ -17,10 +18,10 @@ function repositoryName() {
   return value;
 }
 
-async function listOpenIssues():Promise<GithubIssueCandidate[]> {
+async function listIssues(state:"open"|"all"="open"):Promise<GithubIssueCandidate[]> {
   const repository = repositoryName();
   const token = process.env.GITHUB_TOKEN;
-  const response = await fetch(`https://api.github.com/repos/${repository}/issues?state=open&per_page=100`, {
+  const response = await fetch(`https://api.github.com/repos/${repository}/issues?state=${state}&per_page=100`, {
     headers:{ Accept:"application/vnd.github+json", "X-GitHub-Api-Version":"2026-03-10", "User-Agent":"traceboard-local-demo", ...(token ? { Authorization:`Bearer ${token}` } : {}) },
     cache:"no-store",
   });
@@ -34,7 +35,7 @@ async function listOpenIssues():Promise<GithubIssueCandidate[]> {
 }
 
 export async function getGithubIssueSyncPlan() {
-  const [issues, notion] = await Promise.all([listOpenIssues(), queryNotionTasks()]);
+  const [issues, notion] = await Promise.all([listIssues(), queryNotionTasks()]);
   if (!notion.configured) throw new Error("notion_not_configured");
   const existingLinks = new Set(notion.tasks.flatMap((task) => task.githubLinks));
   const missing = issues.filter((issue) => !existingLinks.has(issue.url));
@@ -51,4 +52,27 @@ export async function syncGithubIssuesToNotion(issueNumbers:number[]) {
     created.push({ number:issue.number, title:issue.title, notionUrl:page.url });
   }
   return { created, skipped:issueNumbers.length - created.length };
+}
+
+export async function alignExistingGithubIssuesInNotion() {
+  const [issues, notion] = await Promise.all([listIssues("all"), queryNotionTasks()]);
+  if (!notion.configured) throw new Error("notion_not_configured");
+  const tasksByLink = new Map(notion.tasks.flatMap((task) => task.githubLinks.map((link) => [link, task] as const)));
+  const aligned = [] as Array<{number:number;title:string;notionUrl:string}>;
+  const linkedPullRequests = [] as Array<{number:number;url:string}>;
+  for (const issue of issues) {
+    const task = tasksByLink.get(issue.url);
+    if (!task) continue;
+    const expectedTitle = `[#${issue.number}] ${issue.title}`;
+    if (task.title !== expectedTitle) {
+      await alignNotionTaskWithGithubIssue(task.id, issue);
+      aligned.push({ number:issue.number, title:expectedTitle, notionUrl:task.notionUrl });
+    }
+    const evidence = await getGithubEvidenceSet(issue.url, task.status);
+    for (const item of evidence.filter((item) => item.label.startsWith("PR #") && !task.githubLinks.includes(item.url))) {
+      await appendGithubLinkToNotionTask(task.id, item.url);
+      linkedPullRequests.push({ number:issue.number, url:item.url });
+    }
+  }
+  return { aligned, linkedPullRequests };
 }

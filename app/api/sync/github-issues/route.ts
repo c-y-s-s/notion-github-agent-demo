@@ -1,8 +1,13 @@
-import { getGithubIssueSyncPlan, syncGithubIssuesToNotion } from "../../../../lib/github-sync";
+import { alignExistingGithubIssuesInNotion, getGithubIssueSyncPlan, syncGithubIssuesToNotion } from "../../../../lib/github-sync";
 
 export async function GET() {
   try { return Response.json(await getGithubIssueSyncPlan()); }
   catch (error) { return Response.json({ error:error instanceof Error ? error.message : "Sync preview failed" }, { status:502 }); }
+}
+
+export async function PATCH() {
+  try { return Response.json(await alignExistingGithubIssuesInNotion()); }
+  catch (error) { return Response.json({ error:error instanceof Error ? error.message : "Alignment failed" }, { status:502 }); }
 }
 
 export async function POST(request:Request) {
