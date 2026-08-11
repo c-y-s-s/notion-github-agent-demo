@@ -18,6 +18,17 @@ async function run(file:string, args:string[], cwd:string, timeout=300_000) {
   return await execFileAsync(file, args, { cwd, timeout, maxBuffer:4_000_000, env:safeEnv() });
 }
 
+async function hasStagedChanges(cwd:string) {
+  try {
+    await run("git", ["diff", "--cached", "--quiet"], cwd, 30_000);
+    return false;
+  } catch (error) {
+    const code = (error as { code?:number }).code;
+    if (code === 1) return true;
+    throw error;
+  }
+}
+
 async function runWithClosedStdin(file:string, args:string[], cwd:string, timeout=300_000) {
   return await new Promise<{stdout:string;stderr:string}>((resolve, reject) => {
     const child = spawn(file, args, { cwd, env:safeEnv(), stdio:["ignore", "pipe", "pipe"] });
@@ -80,21 +91,29 @@ export async function prepareLocalFix(input:{title:string;issueNumber:number|nul
 export async function pushLocalFix(runData:{title:string;issueNumber:number|null;branch:string;worktree:string;changedFiles:string[]}) {
   for (const file of runData.changedFiles) await readFile(path.join(runData.worktree, file), "utf8");
   await run("git", ["add", "--", ...runData.changedFiles], runData.worktree, 30_000);
-  await run("git", ["commit", "-m", `fix: ${runData.title}`], runData.worktree, 60_000);
+  if (await hasStagedChanges(runData.worktree)) await run("git", ["commit", "-m", `fix: ${runData.title}`], runData.worktree, 60_000);
   await run("git", ["push", "-u", "origin", runData.branch], runData.worktree, 120_000);
   const repository = process.env.GITHUB_SYNC_REPOSITORY || "c-y-s-s/notion-github-agent-demo";
   const token = process.env.GITHUB_TOKEN;
   if (!token) throw new Error("github_token_missing_for_pr");
   const body = `${runData.issueNumber ? `Closes #${runData.issueNumber}\n\n` : ""}由 Traceboard 小型修正流程產生。已通過 lint、test 與 build；請人工 Review 後再合併。`;
-  const response = await fetch(`https://api.github.com/repos/${repository}/pulls`, {
+  const requestHeaders = { Authorization:`Bearer ${token}`, Accept:"application/vnd.github+json", "Content-Type":"application/json", "X-GitHub-Api-Version":"2026-03-10", "User-Agent":"traceboard-local-demo" };
+  const [owner] = repository.split("/");
+  const existingResponse = await fetch(`https://api.github.com/repos/${repository}/pulls?state=open&head=${encodeURIComponent(`${owner}:${runData.branch}`)}`, { headers:requestHeaders });
+  const existing = existingResponse.ok ? await existingResponse.json() as Array<{ html_url?:string }> : [];
+  const response = existing[0]?.html_url ? null : await fetch(`https://api.github.com/repos/${repository}/pulls`, {
     method:"POST",
-    headers:{ Authorization:`Bearer ${token}`, Accept:"application/vnd.github+json", "Content-Type":"application/json", "X-GitHub-Api-Version":"2026-03-10", "User-Agent":"traceboard-local-demo" },
+    headers:requestHeaders,
     body:JSON.stringify({ title:`fix: ${runData.title}`, head:runData.branch, base:baseRef, body, draft:true }),
   });
-  const data = await response.json() as { html_url?:string; message?:string };
-  if (!response.ok || !data.html_url) throw new Error(data.message || `GitHub PR HTTP ${response.status}`);
+  const data = existing[0]?.html_url ? existing[0] : await response!.json() as { html_url?:string; message?:string };
+  if ((!existing[0]?.html_url && !response!.ok) || !data.html_url) throw new Error(("message" in data && data.message) || `GitHub PR HTTP ${response?.status}`);
   const result = { branch:runData.branch, pullRequestUrl:data.html_url };
-  await run("git", ["worktree", "remove", "--force", runData.worktree], repoRoot, 60_000);
-  await run("git", ["branch", "-D", runData.branch], repoRoot, 30_000);
+  await cleanupLocalFix(runData);
   return result;
+}
+
+export async function cleanupLocalFix(runData:{branch:string;worktree:string}) {
+  try { await run("git", ["worktree", "remove", "--force", runData.worktree], repoRoot, 60_000); } catch { /* best-effort cleanup */ }
+  try { await run("git", ["branch", "-D", runData.branch], repoRoot, 30_000); } catch { /* branch may already be absent */ }
 }
