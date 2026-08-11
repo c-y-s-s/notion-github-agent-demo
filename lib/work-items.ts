@@ -29,7 +29,7 @@ function parseIssueUrl(value:string) {
   return match ? { repository:match[1], issueNumber:Number(match[2]), issueUrl:value } : null;
 }
 
-export async function upsertWorkItem(input:{notionTaskId:string;notionUrl:string;title:string;githubLinks:string[];status?:string;githubEvidence?:Array<{phase:string}>}) {
+export async function upsertWorkItem(input:{notionTaskId:string;notionUrl:string;title:string;githubLinks:string[];status?:string;githubEvidence?:Array<{phase:string;url?:string}>}) {
   const issue = input.githubLinks.map(parseIssueUrl).find(Boolean);
   if (!issue) return null;
   await ensureWorkItemsSchema();
@@ -38,13 +38,14 @@ export async function upsertWorkItem(input:{notionTaskId:string;notionUrl:string
     engineeringStatus:deriveEngineeringStatus((input.githubEvidence || []).map((item) => item.phase)),
     acceptanceStatus:deriveAcceptanceStatus(input.status || "未開始"),
   };
+  const pullRequestUrl = (input.githubEvidence || []).find((item) => item.url?.includes("/pull/"))?.url || input.githubLinks.find((link) => link.includes("/pull/")) || null;
   const existing = await getDb().select().from(workItems).where(eq(workItems.notionTaskId, input.notionTaskId)).limit(1);
   if (existing[0]) {
-    await getDb().update(workItems).set({ notionUrl:input.notionUrl, title:input.title, repository:issue.repository, githubIssueNumber:issue.issueNumber, githubIssueUrl:issue.issueUrl, ...reconciled, updatedAt:now }).where(eq(workItems.id, existing[0].id));
+    await getDb().update(workItems).set({ notionUrl:input.notionUrl, title:input.title, repository:issue.repository, githubIssueNumber:issue.issueNumber, githubIssueUrl:issue.issueUrl, ...reconciled, ...(pullRequestUrl ? { pullRequestUrl } : {}), updatedAt:now }).where(eq(workItems.id, existing[0].id));
     return existing[0].id;
   }
   const id = crypto.randomUUID();
-  await getDb().insert(workItems).values({ id, notionTaskId:input.notionTaskId, notionUrl:input.notionUrl, title:input.title, repository:issue.repository, githubIssueNumber:issue.issueNumber, githubIssueUrl:issue.issueUrl, ...reconciled, createdAt:now, updatedAt:now });
+  await getDb().insert(workItems).values({ id, notionTaskId:input.notionTaskId, notionUrl:input.notionUrl, title:input.title, repository:issue.repository, githubIssueNumber:issue.issueNumber, githubIssueUrl:issue.issueUrl, ...reconciled, pullRequestUrl, createdAt:now, updatedAt:now });
   return id;
 }
 
@@ -57,7 +58,7 @@ export async function transitionWorkItemByTask(taskId:string, input:{engineering
   await getDb().update(workItems).set({ ...input, updatedAt:new Date().toISOString() }).where(and(eq(workItems.id, current.id), eq(workItems.updatedAt, current.updatedAt)));
 }
 
-export async function backfillWorkItems(tasks:Array<{id:string;notionUrl:string;title:string;githubLinks:string[];status?:string;githubEvidence?:Array<{phase:string}>}>) {
+export async function backfillWorkItems(tasks:Array<{id:string;notionUrl:string;title:string;githubLinks:string[];status?:string;githubEvidence?:Array<{phase:string;url?:string}>}>) {
   const ids = [] as string[];
   for (const task of tasks) {
     const id = await upsertWorkItem({ notionTaskId:task.id, notionUrl:task.notionUrl, title:task.title, githubLinks:task.githubLinks, status:task.status, githubEvidence:task.githubEvidence });
