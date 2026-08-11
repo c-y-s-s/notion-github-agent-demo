@@ -20,7 +20,11 @@ type ChatMessage = { role:"user"|"agent"; text:string; tools?:string[] };
 type SyncIssue = { number:number; title:string; url:string; workType:string };
 type TaskAgentAnalysis = { summary:string; likely_cause:string; proposed_changes:string[]; validation_steps:string[]; risk_level:"low"|"medium"|"high"; eligible_for_small_fix:boolean; eligibility_reason:string; blocked_by:string[]; inspected_files:string[] };
 type FixPreview = { branch:string; changedFiles:string[]; diff:string; testSummary:string; pushToken:string };
-type ActiveTool = "brief"|"sync"|"agent"|null;
+type ActiveTool = "brief"|"sync"|"agent"|"evaluation"|null;
+type Evaluation = {
+  metrics:{total:number;testsPassRate:number;pullRequestRate:number;humanAcceptanceRate:number;averageDurationMs:number;failureCount:number};
+  runs:Array<{id:string;taskTitle:string;issueNumber:number|null;status:string;changedFiles:number;changedLines:number;durationMs:number;pullRequestUrl:string|null;errorCode:string|null;createdAt:string}>;
+};
 
 const filters = ["全部", "本週", "逾期", "無期限", "未開始", "執行中", "已完成"] as const;
 
@@ -70,6 +74,9 @@ export default function Home() {
   const [fixError, setFixError] = useState("");
   const [pullRequestUrl, setPullRequestUrl] = useState("");
   const [activeTool, setActiveTool] = useState<ActiveTool>(null);
+  const [evaluation, setEvaluation] = useState<Evaluation|null>(null);
+  const [evaluationError, setEvaluationError] = useState("");
+  const [evaluationLoading, setEvaluationLoading] = useState(false);
 
   const loadTasks = useCallback(async () => {
     setSource("loading");
@@ -176,6 +183,17 @@ export default function Home() {
     finally { setSyncLoading(false); }
   }
 
+  async function loadEvaluation() {
+    setActiveTool("evaluation"); setEvaluationLoading(true); setEvaluationError("");
+    try {
+      const response = await fetch("/api/evaluation", { cache:"no-store" });
+      const data = await response.json() as Evaluation & { error?:string };
+      if (!response.ok) throw new Error(data.error || "Evaluation unavailable");
+      setEvaluation(data);
+    } catch (error) { setEvaluationError(error instanceof Error ? error.message : "unknown_error"); }
+    finally { setEvaluationLoading(false); }
+  }
+
   async function confirmGithubSync() {
     if (!syncIssues.length) return;
     setSyncLoading(true); setSyncResult("");
@@ -241,6 +259,7 @@ export default function Home() {
             <button className={activeTool === "brief" ? "active" : ""} onClick={() => setActiveTool(activeTool === "brief" ? null : "brief")}>今日摘要</button>
             <button className={activeTool === "sync" ? "active" : ""} onClick={() => setActiveTool(activeTool === "sync" ? null : "sync")}>匯入 Issue</button>
             <button className={activeTool === "agent" ? "active" : ""} onClick={() => setActiveTool(activeTool === "agent" ? null : "agent")}>詢問 Agent</button>
+            <button className={activeTool === "evaluation" ? "active" : ""} onClick={() => activeTool === "evaluation" ? setActiveTool(null) : void loadEvaluation()}>Agent 評測</button>
             <button className="refreshButton" aria-label="重新同步資料" onClick={() => void loadTasks()} disabled={source === "loading"}>{source === "loading" ? "同步中…" : "重新整理"}</button>
           </div>
         </div>
@@ -295,6 +314,28 @@ export default function Home() {
             <input id="agent-question" value={question} onChange={(event) => setQuestion(event.target.value)} maxLength={1000} placeholder="詢問目前工作狀態…" />
             <button disabled={!question.trim() || chatLoading}>{chatLoading ? "查詢中" : "送出"}</button>
           </form>
+        </section>}
+
+        {activeTool === "evaluation" && <section className="evaluationPanel toolPanel" aria-labelledby="evaluation-title">
+          <div className="evaluationHead"><div><h2 id="evaluation-title">Agent 評測</h2><p>只記錄結構化執行結果，不保存 Token、完整 Prompt 或 Diff。</p></div><button onClick={() => void loadEvaluation()} disabled={evaluationLoading}>{evaluationLoading ? "讀取中…" : "重新整理"}</button></div>
+          {evaluationError && <p className="fixError">評測資料無法讀取：{evaluationError}</p>}
+          {evaluation && <>
+            <div className="evaluationMetrics">
+              <article><span>Runs</span><strong>{evaluation.metrics.total}</strong></article>
+              <article><span>測試通過</span><strong>{Math.round(evaluation.metrics.testsPassRate * 100)}%</strong></article>
+              <article><span>產生 PR</span><strong>{Math.round(evaluation.metrics.pullRequestRate * 100)}%</strong></article>
+              <article><span>平均耗時</span><strong>{Math.round(evaluation.metrics.averageDurationMs / 1000)}s</strong></article>
+            </div>
+            <div className="evaluationRuns">
+              {!evaluation.runs.length && <p>尚無 Agent Run。完成一次小型修正後會開始累積資料。</p>}
+              {evaluation.runs.slice(0, 10).map((run) => <article key={run.id}>
+                <div><strong>{run.issueNumber ? `#${run.issueNumber} · ` : ""}{run.taskTitle}</strong><small>{run.changedFiles} 個檔案 · {run.changedLines} 行 · {(run.durationMs / 1000).toFixed(1)} 秒</small></div>
+                <span className={`runStatus runStatus-${run.status}`}>{run.status === "pr_created" ? "PR 已建立" : run.status === "prepared" ? "等待確認" : "失敗"}</span>
+                {run.pullRequestUrl && <a href={run.pullRequestUrl} target="_blank" rel="noreferrer">PR ↗</a>}
+                {run.errorCode && <code>{run.errorCode}</code>}
+              </article>)}
+            </div>
+          </>}
         </section>}
 
         <section className="workspace">

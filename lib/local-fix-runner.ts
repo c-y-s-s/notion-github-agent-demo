@@ -51,6 +51,7 @@ function branchSlug(title:string) {
 }
 
 export async function prepareLocalFix(input:{title:string;issueNumber:number|null;allowedFiles:string[];summary:string;proposedChanges:string[];validationSteps:string[]}) {
+  const startedAt = Date.now();
   if (!input.allowedFiles.length || input.allowedFiles.length > 3) throw new Error("invalid_allowed_files");
   const runId = crypto.randomUUID().slice(0, 8);
   const branch = `codex/fix-${input.issueNumber ? `issue-${input.issueNumber}` : branchSlug(input.title)}-${runId}`;
@@ -80,7 +81,7 @@ export async function prepareLocalFix(input:{title:string;issueNumber:number|nul
     const lint = await run("npm", ["run", "lint"], worktree);
     const tests = await run("npm", ["test"], worktree);
     const diff = (await run("git", ["diff", "--no-ext-diff", "--unified=3"], worktree, 30_000)).stdout.slice(0, 60_000);
-    return { branch, worktree, changedFiles, diff, testSummary:`Lint 通過\n測試與 Build 通過\n${[lint.stdout, tests.stdout].join("\n").slice(-2500)}` };
+    return { branch, worktree, changedFiles, changedLines, durationMs:Date.now() - startedAt, diff, testSummary:`Lint 通過\n測試與 Build 通過\n${[lint.stdout, tests.stdout].join("\n").slice(-2500)}` };
   } catch (error) {
     try { await run("git", ["worktree", "remove", "--force", worktree], repoRoot, 60_000); } catch { /* best-effort cleanup */ }
     try { await run("git", ["branch", "-D", branch], repoRoot, 30_000); } catch { /* best-effort cleanup */ }
