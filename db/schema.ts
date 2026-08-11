@@ -1,4 +1,26 @@
-import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import type { AcceptanceStatus, EngineeringStatus } from "../lib/work-item-state";
+
+export const workItems = sqliteTable("work_items", {
+  id:text("id").primaryKey(),
+  notionTaskId:text("notion_task_id").notNull(),
+  notionUrl:text("notion_url").notNull(),
+  title:text("title").notNull(),
+  repository:text("repository").notNull(),
+  githubIssueNumber:integer("github_issue_number").notNull(),
+  githubIssueUrl:text("github_issue_url").notNull(),
+  engineeringStatus:text("engineering_status").$type<EngineeringStatus>().notNull().default("issue_open"),
+  acceptanceStatus:text("acceptance_status").$type<AcceptanceStatus>().notNull().default("not_started"),
+  branch:text("branch"),
+  pullRequestUrl:text("pull_request_url"),
+  latestAgentRunId:text("latest_agent_run_id"),
+  createdAt:text("created_at").notNull(),
+  updatedAt:text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("idx_work_items_notion_task_id").on(table.notionTaskId),
+  uniqueIndex("idx_work_items_repository_issue").on(table.repository, table.githubIssueNumber),
+  index("idx_work_items_engineering_status").on(table.engineeringStatus),
+]);
 
 export const agentRuns = sqliteTable("agent_runs", {
   id:text("id").primaryKey(),
