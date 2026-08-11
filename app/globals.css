@@ -72,6 +72,11 @@ h2 { margin:0; font-size:17px; letter-spacing:-.015em; }
 .githubEvidence a { color:var(--ink); text-decoration:none; }.githubEvidence a:hover { color:var(--blue); text-decoration:underline; }
 .taskName small,.githubEvidence small { display:block; margin-top:6px; color:var(--muted); font-size:12px; }
 .githubEvidenceList { display:flex; align-items:center; flex-wrap:wrap; gap:7px; padding:9px 0; }
+.workItemNext { display:grid; justify-items:start; gap:5px; padding:9px 0; }
+.workItemNext>span { color:#343a42; font-size:12px; font-weight:700; }
+.workItemNext>small { color:var(--muted); font-size:11px; }
+.workItemNext>a,.workItemNext>button { padding:0; border:0; color:var(--blue); background:transparent; font-size:11px; font-weight:700; text-decoration:none; }
+.workItemNext>a:hover,.workItemNext>button:hover { text-decoration:underline; }
 .githubEvidence + .githubEvidence { padding-top:12px; border-top:1px dashed var(--line); }
 .evidenceFlag { display:inline-block; padding:3px 6px; border-radius:4px; color:#72510d; background:#fff0c9; font-size:10px; font-weight:700; }
 .evidenceFlag-conflict { color:var(--red); background:#fde5e2; }
