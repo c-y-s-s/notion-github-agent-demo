@@ -2,6 +2,7 @@ import { getGithubWorkItemContext } from "../../../../lib/github";
 import { getGithubRepositoryContext } from "../../../../lib/repository-context";
 import { getTaskDataset } from "../../../../lib/task-data";
 import { createFixApproval } from "../../../../lib/fix-approvals";
+import { transitionWorkItemByTask, tryWorkItem, upsertWorkItem } from "../../../../lib/work-items";
 
 type OpenAIOutput = { type:string; name?:string; arguments?:string };
 
@@ -38,6 +39,10 @@ export async function POST(request:Request) {
     if (!dataset.configured) return Response.json({ error:"notion_not_configured" }, { status:503 });
     const task = dataset.tasks.find((item) => item.id === taskId);
     if (!task) return Response.json({ error:"task_not_found" }, { status:404 });
+    await tryWorkItem(async () => {
+      await upsertWorkItem({ notionTaskId:task.id, notionUrl:task.notionUrl, title:task.title, githubLinks:task.githubLinks, status:task.status, githubEvidence:task.githubEvidence });
+      await transitionWorkItemByTask(task.id, { engineeringStatus:"analyzing", acceptanceStatus:"in_progress" });
+    });
     const contexts = (await Promise.all(task.githubLinks.map(async (url) => {
       try { return await getGithubWorkItemContext(url); } catch { return null; }
     }))).filter(Boolean);
@@ -81,6 +86,7 @@ export async function POST(request:Request) {
       proposedChanges:analysis.proposed_changes,
       validationSteps:analysis.validation_steps,
     }) : null;
+    await tryWorkItem(() => transitionWorkItemByTask(task.id, { engineeringStatus:approvalToken ? "plan_ready" : "blocked" }));
     return Response.json({ task:{ id:task.id, title:task.title, notionUrl:task.notionUrl }, analysis, approvalToken });
   } catch (error) {
     return Response.json({ error:error instanceof Error ? error.message : "Task analysis failed" }, { status:502 });

@@ -1,5 +1,6 @@
 import { appendGithubLinkToNotionTask } from "../../../../../lib/notion";
 import { recordCreatedPullRequest, recordFailedRun, tryRecord } from "../../../../../lib/agent-runs";
+import { transitionWorkItemByTask, tryWorkItem } from "../../../../../lib/work-items";
 
 export async function POST(request:Request) {
   const startedAt = Date.now();
@@ -12,6 +13,7 @@ export async function POST(request:Request) {
     const data = await runner.json() as { runId?:string; taskTitle?:string; issueNumber?:number|null; pullRequestUrl?:string; error?:string; warning?:string };
     if (!runner.ok) {
       if (data.runId) await tryRecord(() => recordFailedRun({ id:data.runId!, taskId, taskTitle:data.taskTitle || "Unknown task", issueNumber:data.issueNumber ?? null, stage:"push", error:data.error || "Local runner failed", durationMs:Date.now() - startedAt }));
+      await tryWorkItem(() => transitionWorkItemByTask(taskId, { engineeringStatus:"push_failed", latestAgentRunId:data.runId || null }));
       throw new Error(data.error || "Local runner failed");
     }
     if (data.pullRequestUrl) {
@@ -19,6 +21,7 @@ export async function POST(request:Request) {
       catch { data.warning = "Draft PR 已建立，但 Notion 連結寫回失敗；請重新同步。"; }
     }
     if (data.runId && data.pullRequestUrl) await tryRecord(() => recordCreatedPullRequest({ id:data.runId!, pullRequestUrl:data.pullRequestUrl!, durationMs:Date.now() - startedAt }));
+    if (data.pullRequestUrl) await tryWorkItem(() => transitionWorkItemByTask(taskId, { engineeringStatus:"pr_draft", pullRequestUrl:data.pullRequestUrl!, latestAgentRunId:data.runId || null }));
     return Response.json(data);
   } catch (error) {
     return Response.json({ error:error instanceof Error ? error.message : "Push failed" }, { status:502 });
