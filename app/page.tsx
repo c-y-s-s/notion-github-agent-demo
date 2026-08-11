@@ -2,6 +2,8 @@
 
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Markdown from "react-markdown";
+import { getWorkItemPresentation } from "../lib/work-item-presentation";
+import type { AcceptanceStatus, EngineeringStatus } from "../lib/work-item-state";
 
 type Status = "未開始" | "執行中" | "已完成";
 type Tone = "neutral" | "review" | "success" | "risk";
@@ -9,12 +11,13 @@ type ComputedTag = "due_this_week" | "completed_this_week" | "overdue" | "no_due
 type Evidence = { label: string; detail: string; tone: Tone; url?: string; conflict: boolean };
 type Analysis = { code:string; severity:"none"|"info"|"warning"|"conflict"; summary:string; suggestedStatus:Status|null; confidence:number; ruleVersion:string };
 type WorkType = "Feature"|"Bug"|"Chore"|"Docs"|"Research"|"未分類";
-type Task = { id:string; title: string; project: string; workType:WorkType; status: Status; due: string; notionUrl:string; githubLinks:string[]; computedTags:ComputedTag[]; evidences: Evidence[]; analysis:Analysis; conflict: boolean };
+type WorkItem = { engineeringStatus:EngineeringStatus;acceptanceStatus:AcceptanceStatus;pullRequestUrl:string|null };
+type Task = { id:string; title: string; project: string; workType:WorkType; status: Status; due: string; notionUrl:string; githubLinks:string[]; workItem:WorkItem|null; computedTags:ComputedTag[]; evidences: Evidence[]; analysis:Analysis; conflict: boolean };
 type ApiTask = {
   id:string; title:string; project:string; workType:WorkType; status:Status; due:string; notionUrl:string; githubLinks:string[]; computedTags:ComputedTag[];
   githubEvidence?:Array<{label:string;detail:string;tone:Tone;url:string;conflict:boolean}>;
   githubErrors?:Array<{url:string;message:string}>;
-  analysis:Analysis;
+  analysis:Analysis; workItem?:WorkItem|null;
 };
 type ChatMessage = { role:"user"|"agent"; text:string; tools?:string[] };
 type SyncIssue = { number:number; title:string; url:string; workType:string };
@@ -39,7 +42,7 @@ function normalizeTask(task: ApiTask): Task {
   }));
   const evidences = [...validEvidence, ...errors];
   if (!evidences.length) evidences.push({ label: "尚未連結", detail: "等待 Issue 或 PR", tone: "neutral", conflict: false });
-  return { ...task, evidences, conflict: task.analysis.severity === "conflict" };
+  return { ...task, workItem:task.workItem || null, evidences, conflict: task.analysis.severity === "conflict" };
 }
 
 function githubReference(link:string) {
@@ -215,6 +218,7 @@ export default function Home() {
       if (!response.ok || !data.analysis) throw new Error(data.error || "Analysis failed");
       setTaskAgentAnalysis(data.analysis);
       setFixApprovalToken(data.approvalToken || "");
+      await loadTasks();
     } catch (error) { setTaskAnalysisError(error instanceof Error ? error.message : "unknown_error"); }
     finally { setTaskAnalysisLoading(false); }
   }
@@ -227,6 +231,7 @@ export default function Home() {
       const data = await response.json() as Partial<FixPreview> & { error?:string };
       if (!response.ok || !data.pushToken || !data.diff) throw new Error(data.error || "Fix preparation failed");
       setFixPreview(data as FixPreview);
+      await loadTasks();
     } catch (error) { setFixError(error instanceof Error ? error.message : "unknown_error"); setApprovedTaskId(""); }
     finally { setFixLoading(false); }
   }
@@ -345,25 +350,17 @@ export default function Home() {
           </div>
 
           <div className="taskTable">
-            <div className="tableRow tableHeader"><span>任務</span><span>狀態</span><span>到期日</span><span>工程狀態</span></div>
+            <div className="tableRow tableHeader"><span>任務</span><span>狀態</span><span>到期日</span><span>目前進度／下一步</span></div>
             {source === "loading" && <div className="dataState">正在同步 Notion 與 GitHub，畫面不會顯示假資料。</div>}
             {source === "error" && <div className="dataState errorState">讀取失敗。請檢查連線後重新同步。</div>}
             {source === "unconfigured" && <div className="dataState">尚未設定 Notion，請先完成本機環境變數。</div>}
             {source === "notion" && !visibleTasks.length && <div className="dataState">沒有符合目前篩選條件的 Task。</div>}
             {visibleTasks.map((task) => (
               <article className="tableRow" key={task.id}>
-                <div className="taskName"><button onClick={() => void analyzeTask(task)}><strong>{task.title}</strong><span className={`workType type-${task.workType}`}>{task.workType}</span><small>{task.project}{task.githubLinks.length ? ` · ${task.githubLinks.map(githubReference).join(" → ")}` : ""}</small></button></div>
+                <div className="taskName"><strong>{task.title}</strong><span className={`workType type-${task.workType}`}>{task.workType}</span><small>{task.project}{task.githubLinks.length ? ` · ${task.githubLinks.map(githubReference).join(" → ")}` : ""}</small></div>
                 <div><span className={`status status-${task.status}`}>{task.status}</span></div>
                 <span>{task.due}</span>
-                <div className="githubEvidenceList">
-                  {task.evidences.slice(-1).map((item) => (
-                    <div className="githubEvidence" key={item.url || item.label}>
-                      <strong>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">{item.label} ↗</a> : item.label}</strong>
-                      <small className={item.tone}>{item.detail}</small>
-                    </div>
-                  ))}
-                  {task.analysis.severity !== "none" && <span className={`evidenceFlag evidenceFlag-${task.analysis.severity}`}>{task.analysis.suggestedStatus ? `建議改為${task.analysis.suggestedStatus}` : task.analysis.severity === "conflict" ? "需要確認" : "證據不足"}</span>}
-                </div>
+                {(() => { const next = getWorkItemPresentation(task.workItem); return <div className="workItemNext"><span>{next.progress}</span>{next.action === "analyze" ? <button onClick={() => void analyzeTask(task)}>{next.nextLabel}</button> : next.action === "open_pr" && task.workItem?.pullRequestUrl ? <a href={task.workItem.pullRequestUrl} target="_blank" rel="noreferrer">{next.nextLabel} ↗</a> : <small>{next.nextLabel}</small>}</div>; })()}
               </article>
             ))}
           </div>
