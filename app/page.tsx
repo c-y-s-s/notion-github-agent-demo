@@ -31,6 +31,7 @@ type Evaluation = {
   repairBenchmark:{
     initial:{generatedAt:string;metrics:{total:number;repaired:number;repairSuccessRate:number;humanInterventionRate:number;averageDurationMs:number};failedCases:string[]};
     specificationRevision:{metrics:{total:number;repaired:number;repairSuccessRate:number;humanInterventionRate:number}};
+    cases:Array<{id:string;category:string;title:string;issue:string}>;
   };
 };
 
@@ -338,6 +339,22 @@ export default function Home() {
               <article><span>平均耗時</span><strong>{Math.round(evaluation.repairBenchmark.initial.metrics.averageDurationMs / 1000)}s</strong></article>
             </div>
             <p className="evaluationCaveat">首輪 7/10；失敗案例 {evaluation.repairBenchmark.initial.failedCases.join("、")} 經人工審查為規格歧義。修訂後只重跑這 3 題並全數通過，不能視為完整 100% 重跑。</p>
+            <details className="evaluationReport">
+              <summary>查看完整評測報告</summary>
+              <div className="reportHeader">
+                <div><strong>首輪案例結果</strong><small>資料集版本：2026-08-11 · 每題執行 1 次</small></div>
+                <a href="/api/evaluation/report" download>下載 Markdown</a>
+              </div>
+              <div className="reportTable">
+                <div className="reportRow reportTableHead"><span>ID</span><span>類型</span><span>案例</span><span>首輪</span></div>
+                {evaluation.repairBenchmark.cases.map((item) => {
+                  const failed = evaluation.repairBenchmark.initial.failedCases.includes(item.id);
+                  return <div className="reportRow" key={item.id}><code>{item.id}</code><span>{item.category}</span><div><strong>{item.title}</strong><small>{item.issue}</small></div><b className={failed ? "reportFailed" : "reportPassed"}>{failed ? "失敗" : "通過"}</b></div>;
+                })}
+              </div>
+              <div className="reportFinding"><strong>人工審查發現</strong><p>B03、B04 的 Issue 缺少必要 acceptance criteria；B07 的 hidden test 把顯示格式誤當成安全需求。補清楚規格後三題 selective rerun 全數通過，顯示 Evaluation 同時能找出 Agent 問題與需求品質問題。</p></div>
+              <div className="reportLimit"><strong>限制</strong><p>每題只有一次首輪執行，70% 不能視為穩定模型能力。下一版需凍結 dataset，逐題執行 3–5 次。</p></div>
+            </details>
             <div className="benchmarkSummary">
               <div><strong>狀態判斷基準測試</strong><small>固定案例，可重現驗證 Agent 前置規則</small></div>
               <b className={evaluation.benchmark.passRate === 1 ? "benchmarkPass" : "benchmarkFail"}>{evaluation.benchmark.passed}/{evaluation.benchmark.total} 通過</b>
