@@ -27,6 +27,7 @@ type ActiveTool = "brief"|"sync"|"agent"|"evaluation"|null;
 type Evaluation = {
   metrics:{total:number;testsPassRate:number;pullRequestRate:number;humanAcceptanceRate:number;averageDurationMs:number;failureCount:number};
   runs:Array<{id:string;taskTitle:string;issueNumber:number|null;status:string;changedFiles:number;changedLines:number;durationMs:number;pullRequestUrl:string|null;errorCode:string|null;createdAt:string}>;
+  benchmark:{total:number;passed:number;passRate:number;results:Array<{id:string;description:string;passed:boolean}>};
 };
 
 const filters = ["全部", "本週", "逾期", "無期限", "未開始", "執行中", "已完成"] as const;
@@ -330,6 +331,10 @@ export default function Home() {
               <article><span>測試通過</span><strong>{Math.round(evaluation.metrics.testsPassRate * 100)}%</strong></article>
               <article><span>產生 PR</span><strong>{Math.round(evaluation.metrics.pullRequestRate * 100)}%</strong></article>
               <article><span>平均耗時</span><strong>{Math.round(evaluation.metrics.averageDurationMs / 1000)}s</strong></article>
+            </div>
+            <div className="benchmarkSummary">
+              <div><strong>狀態判斷基準測試</strong><small>固定案例，可重現驗證 Agent 前置規則</small></div>
+              <b className={evaluation.benchmark.passRate === 1 ? "benchmarkPass" : "benchmarkFail"}>{evaluation.benchmark.passed}/{evaluation.benchmark.total} 通過</b>
             </div>
             <div className="evaluationRuns">
               {!evaluation.runs.length && <p>尚無 Agent Run。完成一次小型修正後會開始累積資料。</p>}
